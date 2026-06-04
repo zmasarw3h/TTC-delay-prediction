@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.data.clean_data import clean_delay_frame
+from src.data.clean_data import clean_delay_frame, resolve_mode_raw_dir
 from src.data.load_data import normalize_columns
 
 
@@ -46,3 +46,12 @@ def test_clean_delay_frame_drops_invalid_rows_and_adds_time_fields():
     assert cleaned.loc[0, "hour"] == 8
     assert cleaned.loc[0, "is_holiday"] == 1
 
+
+def test_resolve_mode_raw_dir_detects_ttc_folder_names(tmp_path):
+    bus_dir = tmp_path / "TTC Bus Delays Data"
+    streetcar_dir = tmp_path / "TTC Streetcar Delays Data"
+    bus_dir.mkdir()
+    streetcar_dir.mkdir()
+
+    assert resolve_mode_raw_dir(tmp_path, "bus") == bus_dir
+    assert resolve_mode_raw_dir(tmp_path, "streetcar") == streetcar_dir

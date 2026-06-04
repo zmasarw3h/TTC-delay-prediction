@@ -41,18 +41,24 @@ Place raw TTC files under:
 
 ```text
 data/raw/
-  bus/
+  TTC Bus Delays Data/
     *.xlsx
-  streetcar/
+  TTC Streetcar Delays Data/
     *.xlsx
 ```
 
-Run the cleaner from the repository root:
+Run the cleaner from the repository root. By default it looks for bus and streetcar folders under `data/raw`:
+
+```bash
+python -m src.data.clean_data
+```
+
+You can also provide explicit paths:
 
 ```bash
 python -m src.data.clean_data \
-  --bus-raw-dir data/raw/bus \
-  --streetcar-raw-dir data/raw/streetcar \
+  --bus-raw-dir "data/raw/TTC Bus Delays Data" \
+  --streetcar-raw-dir "data/raw/TTC Streetcar Delays Data" \
   --processed-dir data/processed
 ```
 

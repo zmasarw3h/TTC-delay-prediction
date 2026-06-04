@@ -15,6 +15,16 @@ from src.data.load_data import load_ttc_delay_files
 
 LOGGER = logging.getLogger(__name__)
 
+DEFAULT_RAW_DIR = Path("data/raw")
+MODE_DIR_CANDIDATES = {
+    "bus": ("bus", "TTC Bus Delays Data", "TTC Bus Delay Data"),
+    "streetcar": (
+        "streetcar",
+        "streetcars",
+        "TTC Streetcar Delays Data",
+        "TTC Streetcar Delay Data",
+    ),
+}
 TEXT_COLUMNS = ["Route", "Direction", "Location", "Incident", "Vehicle"]
 OUTPUT_COLUMNS = [
     "mode",
@@ -149,6 +159,41 @@ def ontario_holidays(years: list[int]) -> set[dt.date]:
     return dates
 
 
+def _path_key(path: Path | str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(path).strip().lower())
+
+
+def resolve_mode_raw_dir(raw_root: Path, mode: str, explicit_dir: Path | None = None) -> Path | None:
+    """Resolve a mode-specific raw folder from an explicit path or raw root."""
+    if explicit_dir is not None:
+        return explicit_dir
+    if not raw_root.exists():
+        LOGGER.warning("raw root directory does not exist: %s", raw_root)
+        return None
+    if not raw_root.is_dir():
+        LOGGER.warning("raw root path is not a directory: %s", raw_root)
+        return None
+
+    candidates = {_path_key(name) for name in MODE_DIR_CANDIDATES[mode]}
+    for child in sorted(raw_root.iterdir()):
+        if child.is_dir() and _path_key(child.name) in candidates:
+            return child
+
+    mode_key = _path_key(mode)
+    matches = [
+        child
+        for child in raw_root.iterdir()
+        if child.is_dir() and mode_key in _path_key(child.name)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        LOGGER.warning("%s: multiple candidate raw directories found under %s: %s", mode, raw_root, matches)
+    else:
+        LOGGER.info("%s: no matching raw directory found under %s", mode, raw_root)
+    return None
+
+
 def clean_delay_frame(df: pd.DataFrame, mode: str) -> pd.DataFrame:
     """Standardize and clean a loaded TTC delay DataFrame for one mode."""
     cleaned = df.copy()
@@ -200,7 +245,11 @@ def process_mode(raw_dir: Path | None, processed_dir: Path, mode: str) -> pd.Dat
         LOGGER.warning("%s: raw directory does not exist; skipping: %s", mode, raw_dir)
         return None
 
-    raw = load_ttc_delay_files(raw_dir, mode=mode)
+    try:
+        raw = load_ttc_delay_files(raw_dir, mode=mode)
+    except FileNotFoundError as exc:
+        LOGGER.warning("%s: %s; skipping", mode, exc)
+        return None
     LOGGER.info("%s: loaded %s rows from %s", mode, len(raw), raw_dir)
 
     cleaned = clean_delay_frame(raw, mode=mode)
@@ -212,6 +261,12 @@ def process_mode(raw_dir: Path | None, processed_dir: Path, mode: str) -> pd.Dat
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Clean raw TTC bus/streetcar delay files.")
+    parser.add_argument(
+        "--raw-dir",
+        type=Path,
+        default=DEFAULT_RAW_DIR,
+        help="Root directory containing bus and streetcar raw data folders.",
+    )
     parser.add_argument("--bus-raw-dir", type=Path, default=None)
     parser.add_argument("--streetcar-raw-dir", type=Path, default=None)
     parser.add_argument("--processed-dir", type=Path, default=Path("data/processed"))
@@ -223,8 +278,17 @@ def main() -> None:
     args = parse_args()
     args.processed_dir.mkdir(parents=True, exist_ok=True)
 
+    raw_dirs = {
+        "bus": resolve_mode_raw_dir(args.raw_dir, mode="bus", explicit_dir=args.bus_raw_dir),
+        "streetcar": resolve_mode_raw_dir(
+            args.raw_dir,
+            mode="streetcar",
+            explicit_dir=args.streetcar_raw_dir,
+        ),
+    }
+
     outputs = []
-    for mode, raw_dir in (("bus", args.bus_raw_dir), ("streetcar", args.streetcar_raw_dir)):
+    for mode, raw_dir in raw_dirs.items():
         result = process_mode(raw_dir=raw_dir, processed_dir=args.processed_dir, mode=mode)
         if result is not None:
             outputs.append(result)

@@ -4,9 +4,9 @@ Raw TTC delay workbooks are not committed to this repository. Place downloaded f
 
 ```text
 data/raw/
-  bus/
+  TTC Bus Delays Data/
     *.xlsx
-  streetcar/
+  TTC Streetcar Delays Data/
     *.xlsx
 ```
 
@@ -15,13 +15,10 @@ The cleaner can read `.xlsx`, `.xlsm`, `.xls`, `.xlsb`, and `.csv` files where t
 Run the cleaning pipeline from the repository root:
 
 ```bash
-python -m src.data.clean_data \
-  --bus-raw-dir data/raw/bus \
-  --streetcar-raw-dir data/raw/streetcar \
-  --processed-dir data/processed
+python -m src.data.clean_data
 ```
 
-You can also run only one mode by passing only `--bus-raw-dir` or only `--streetcar-raw-dir`.
+By default, the cleaner looks under `data/raw` and detects common TTC folder names such as `TTC Bus Delays Data` and `TTC Streetcar Delays Data`. You can also run only one mode, or use custom folders, by passing `--bus-raw-dir` or `--streetcar-raw-dir`.
 
 Generated files:
 
@@ -30,4 +27,3 @@ Generated files:
 - `data/processed/ttc_delays_cleaned.csv`
 
 Raw and processed data files are gitignored. Weather enrichment and leakage-safe modeling features will be handled in later phases. `Min Gap` is retained in the cleaned data for auditing but is leakage-sensitive and should not be used in the main model unless later documentation justifies that it is available at incident report time.
-
