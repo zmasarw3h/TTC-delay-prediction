@@ -44,6 +44,12 @@ reports/calibration/*
 !reports/calibration/figures/
 reports/calibration/figures/*
 !reports/calibration/figures/.gitkeep
+!reports/explainability/
+reports/explainability/*
+!reports/explainability/.gitkeep
+!reports/explainability/figures/
+reports/explainability/figures/*
+!reports/explainability/figures/.gitkeep
 *.png
 *.jpg
 *.jpeg

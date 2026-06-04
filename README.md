@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, and Phase 7C severe-delay probability calibration. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
+The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, and Phase 8 model explainability reports. Optuna tuning, FastAPI, and frontend code are not implemented yet. SHAP is optional and not required for the default explainability workflow.
 
 ## Project Structure
 
@@ -230,6 +230,35 @@ reports/calibration/calibrated_two_output_predictions_test.csv
 
 The calibrated artifact is written to `artifacts/calibration/calibrated_two_output_model.joblib`. These calibrated probabilities are intended for the later API; API and frontend code are still not implemented.
 
+## Model Explainability
+
+Generate Phase 8 explainability reports for the existing calibrated two-output artifact:
+
+```bash
+python3 -m src.models.explain_models \
+  --modeling-dir data/processed/modeling \
+  --artifact-path artifacts/calibration/calibrated_two_output_model.joblib \
+  --output-dir reports/explainability
+```
+
+The default split is validation and the default maximum explanation sample is 5,000 rows. The script does not retrain models. It uses model-agnostic permutation importance by default and can optionally attempt a SHAP smoke test with `--include-shap`.
+
+Generated reports:
+
+```text
+reports/explainability/permutation_importance_regression.csv
+reports/explainability/permutation_importance_risk_30.csv
+reports/explainability/permutation_importance_risk_60.csv
+reports/explainability/global_feature_importance.csv
+reports/explainability/representative_prediction_examples.csv
+reports/explainability/explainability_summary.json
+reports/explainability/figures/top_features_regression.png
+reports/explainability/figures/top_features_risk_30.png
+reports/explainability/figures/top_features_risk_60.png
+```
+
+These are local generated reports. API and frontend code are still not implemented.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
@@ -243,3 +272,4 @@ The calibrated artifact is written to `artifacts/calibration/calibrated_two_outp
 - [Model improvement experiments](docs/model_experiments.md)
 - [Two-output delay and risk model](docs/two_output_model.md)
 - [Probability calibration](docs/probability_calibration.md)
+- [Model explainability](docs/explainability.md)
