@@ -11,6 +11,9 @@ artifacts/*
 !artifacts/models/
 artifacts/models/*
 !artifacts/models/.gitkeep
+!artifacts/calibration/
+artifacts/calibration/*
+!artifacts/calibration/.gitkeep
 *.joblib
 *.pkl
 *.pickle
@@ -35,6 +38,12 @@ reports/experiments/*
 !reports/experiments/.gitkeep
 reports/risk_models/*
 !reports/risk_models/.gitkeep
+!reports/calibration/
+reports/calibration/*
+!reports/calibration/.gitkeep
+!reports/calibration/figures/
+reports/calibration/figures/*
+!reports/calibration/figures/.gitkeep
 *.png
 *.jpg
 *.jpeg

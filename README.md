@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, and a Phase 7B two-output delay/risk modeling script. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
+The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, and Phase 7C severe-delay probability calibration. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
 
 ## Project Structure
 
@@ -199,6 +199,37 @@ reports/risk_models/two_output_summary.json
 
 The two-output artifact is written to `artifacts/risk_models/two_output_model.joblib`. API and frontend code are still not implemented.
 
+## Calibrated Severe-Delay Probabilities
+
+Calibrate the Phase 7B severe-delay classifiers:
+
+```bash
+python3 -m src.models.calibrate_risk_models \
+  --modeling-dir data/processed/modeling \
+  --phase-7b-artifact-path artifacts/risk_models/two_output_model.joblib \
+  --selected-regressor-path artifacts/experiments/selected_experiment.joblib \
+  --reports-dir reports/calibration \
+  --artifacts-dir artifacts/calibration \
+  --thresholds 30,60
+```
+
+This Phase 7C workflow trains base severe-delay classifiers on pre-2022 training rows, fits sigmoid and isotonic calibrators on 2022 training rows only, selects calibration methods and operating cutoffs on validation data only, and evaluates test data after those choices are fixed. The Phase 7B uncalibrated outputs are preserved as reference diagnostics, and Phase 7C writes only to new calibration paths.
+
+Generated reports:
+
+```text
+reports/calibration/calibration_metrics.csv
+reports/calibration/calibration_threshold_table.csv
+reports/calibration/calibration_bin_table.csv
+reports/calibration/calibrated_risk_band_summary.csv
+reports/calibration/calibration_selection.json
+reports/calibration/calibrated_two_output_summary.json
+reports/calibration/calibrated_two_output_predictions_validation.csv
+reports/calibration/calibrated_two_output_predictions_test.csv
+```
+
+The calibrated artifact is written to `artifacts/calibration/calibrated_two_output_model.joblib`. These calibrated probabilities are intended for the later API; API and frontend code are still not implemented.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
@@ -211,3 +242,4 @@ The two-output artifact is written to `artifacts/risk_models/two_output_model.jo
 - [Model error analysis](docs/error_analysis.md)
 - [Model improvement experiments](docs/model_experiments.md)
 - [Two-output delay and risk model](docs/two_output_model.md)
+- [Probability calibration](docs/probability_calibration.md)
