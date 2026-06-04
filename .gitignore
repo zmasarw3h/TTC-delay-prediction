@@ -33,6 +33,8 @@ reports/error_analysis/figures/*
 !reports/error_analysis/figures/.gitkeep
 reports/experiments/*
 !reports/experiments/.gitkeep
+reports/risk_models/*
+!reports/risk_models/.gitkeep
 *.png
 *.jpg
 *.jpeg
