@@ -66,8 +66,21 @@ The script supports bus-only or streetcar-only runs if only one raw directory is
 
 `Min Gap` is retained in the cleaned data for auditability, but it is leakage-sensitive for later modeling and should not be used in the main model unless explicitly justified.
 
+## Target Diagnostics
+
+Before feature engineering or model training, inspect the `Min Delay` target distribution and largest delay records:
+
+```bash
+python3 -m src.features.diagnose_target \
+  --input data/processed/ttc_delays_cleaned.csv \
+  --output-dir reports/target_diagnostics
+```
+
+This writes target diagnostics under `reports/target_diagnostics/`. The command does not train models.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
 - [Current state audit](docs/current_state_audit.md)
 - [Model design](docs/model_design.md)
+- [Modeling data policy](docs/modeling_data_policy.md)

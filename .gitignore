@@ -17,6 +17,8 @@ artifacts/*
 # Generated reports
 reports/figures/*
 !reports/figures/.gitkeep
+reports/target_diagnostics/*
+!reports/target_diagnostics/.gitkeep
 *.png
 *.jpg
 *.jpeg
@@ -47,4 +49,3 @@ env/
 .DS_Store
 .idea/
 .vscode/
-
