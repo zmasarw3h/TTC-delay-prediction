@@ -1,0 +1,301 @@
+"""Build leakage-safe modeling datasets from cleaned TTC delay data."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+
+DEFAULT_INPUT = Path("data/processed/ttc_delays_cleaned.csv")
+DEFAULT_OUTPUT_DIR = Path("data/processed/modeling")
+DEFAULT_MAX_DELAY_MINUTES = 240
+DEFAULT_TRAIN_END = "2022-12-31"
+DEFAULT_VAL_YEAR = 2023
+DEFAULT_TEST_YEAR = 2024
+
+CATEGORICAL_COLUMNS = ["mode", "Route", "Direction", "Location", "Incident", "Vehicle"]
+MAIN_CATEGORICAL_FEATURES = ["mode", "Route", "Direction", "Incident", "Location"]
+TARGET_COLUMN = "Min Delay"
+SECONDARY_TARGET_COLUMN = "severe_delay_15"
+LEAKAGE_SENSITIVE_COLUMNS = ["Min Gap", "Min Delay"]
+EXCLUDED_COLUMNS = [
+    "Date",
+    "Min Gap",
+    "Vehicle",
+    "source_file",
+    "source_sheet",
+    "ts",
+    TARGET_COLUMN,
+    SECONDARY_TARGET_COLUMN,
+]
+TIME_FEATURES = [
+    "hour",
+    "day_of_week",
+    "month",
+    "is_weekend",
+    "is_holiday",
+    "hour_sin",
+    "hour_cos",
+    "day_of_year",
+    "day_sin",
+    "day_cos",
+]
+HISTORICAL_FEATURES = [
+    "prior_route_mean_delay",
+    "prior_route_hour_mean_delay",
+    "prior_incident_mean_delay",
+    "prior_mode_mean_delay",
+    "prior_global_mean_delay",
+    "prior_route_hour_7d_mean_delay",
+]
+NUMERIC_FEATURES = TIME_FEATURES + HISTORICAL_FEATURES
+FEATURE_COLUMNS = TIME_FEATURES + MAIN_CATEGORICAL_FEATURES + HISTORICAL_FEATURES
+
+
+def load_cleaned_delays(input_path: Path) -> pd.DataFrame:
+    """Load the cleaned delay audit dataset with stable categorical dtypes."""
+    dtype = {column: "string" for column in CATEGORICAL_COLUMNS}
+    return pd.read_csv(input_path, dtype=dtype, parse_dates=["ts"])
+
+
+def create_modeling_dataset(df: pd.DataFrame, max_delay_minutes: int) -> pd.DataFrame:
+    """Return a filtered copy for modeling without mutating the audit dataset."""
+    modeling = df.copy()
+    modeling["ts"] = pd.to_datetime(modeling["ts"], errors="coerce")
+    modeling[TARGET_COLUMN] = pd.to_numeric(modeling[TARGET_COLUMN], errors="coerce")
+
+    modeling = modeling.dropna(subset=["ts", TARGET_COLUMN])
+    modeling = modeling[
+        (modeling[TARGET_COLUMN] >= 0)
+        & (modeling[TARGET_COLUMN] <= max_delay_minutes)
+    ].copy()
+    return modeling.sort_values("ts").reset_index(drop=True)
+
+
+def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add incident-time features available when an incident is reported."""
+    featured = df.copy()
+    ts = pd.to_datetime(featured["ts"], errors="coerce")
+
+    featured["hour"] = ts.dt.hour
+    featured["day_of_week"] = ts.dt.dayofweek
+    featured["month"] = ts.dt.month
+    featured["is_weekend"] = featured["day_of_week"].isin([5, 6]).astype(int)
+    if "is_holiday" not in featured.columns:
+        featured["is_holiday"] = 0
+    featured["is_holiday"] = pd.to_numeric(featured["is_holiday"], errors="coerce").fillna(0).astype(int)
+
+    featured["hour_sin"] = np.sin(2 * np.pi * featured["hour"] / 24)
+    featured["hour_cos"] = np.cos(2 * np.pi * featured["hour"] / 24)
+    featured["day_of_year"] = ts.dt.dayofyear
+    featured["day_sin"] = np.sin(2 * np.pi * featured["day_of_year"] / 366)
+    featured["day_cos"] = np.cos(2 * np.pi * featured["day_of_year"] / 366)
+    return featured
+
+
+def _prior_expanding_mean(df: pd.DataFrame, group_columns: list[str] | None = None) -> pd.Series:
+    target = pd.to_numeric(df[TARGET_COLUMN], errors="coerce")
+    if group_columns is None:
+        return target.expanding().mean().shift(1)
+
+    grouped = target.groupby([df[column] for column in group_columns], dropna=False)
+    cumsum = grouped.cumsum().groupby([df[column] for column in group_columns], dropna=False).shift(1)
+    count = grouped.cumcount()
+    return cumsum / count.replace(0, np.nan)
+
+
+def _prior_route_hour_7d_mean(df: pd.DataFrame) -> pd.Series:
+    """Mean prior delay for the same route-hour in the previous 7 calendar days."""
+    pieces: list[pd.Series] = []
+    target = pd.to_numeric(df[TARGET_COLUMN], errors="coerce")
+    work = df[["Route", "hour", "ts"]].copy()
+    work[TARGET_COLUMN] = target
+    work["_original_index"] = df.index
+
+    for _, group in work.groupby(["Route", "hour"], dropna=False, sort=False):
+        ordered = group.sort_values(["ts", "_original_index"])
+        indexed = pd.Series(
+            ordered[TARGET_COLUMN].to_numpy(),
+            index=pd.DatetimeIndex(ordered["ts"]),
+        )
+        rolled = indexed.rolling("7D", closed="left").mean()
+        pieces.append(pd.Series(rolled.to_numpy(), index=ordered["_original_index"]))
+
+    if not pieces:
+        return pd.Series(dtype="float64", index=df.index)
+    return pd.concat(pieces).reindex(df.index)
+
+
+def add_historical_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add prior-only target-derived historical features."""
+    featured = df.sort_values("ts").reset_index(drop=True).copy()
+    featured["prior_global_mean_delay"] = _prior_expanding_mean(featured)
+    featured["prior_route_mean_delay"] = _prior_expanding_mean(featured, ["Route"])
+    featured["prior_route_hour_mean_delay"] = _prior_expanding_mean(featured, ["Route", "hour"])
+    featured["prior_incident_mean_delay"] = _prior_expanding_mean(featured, ["Incident"])
+    featured["prior_mode_mean_delay"] = _prior_expanding_mean(featured, ["mode"])
+
+    route_hour_7d = _prior_route_hour_7d_mean(featured)
+    featured["prior_route_hour_7d_mean_delay"] = (
+        route_hour_7d.fillna(featured["prior_route_mean_delay"])
+        .fillna(featured["prior_mode_mean_delay"])
+        .fillna(featured["prior_global_mean_delay"])
+    )
+    return featured
+
+
+def add_targets(df: pd.DataFrame) -> pd.DataFrame:
+    featured = df.copy()
+    featured[SECONDARY_TARGET_COLUMN] = (featured[TARGET_COLUMN] >= 15).astype(int)
+    return featured
+
+
+def build_feature_frame(df: pd.DataFrame, max_delay_minutes: int) -> pd.DataFrame:
+    modeling = create_modeling_dataset(df, max_delay_minutes=max_delay_minutes)
+    modeled = add_time_features(modeling)
+    modeled = add_historical_features(modeled)
+    return add_targets(modeled)
+
+
+def split_modeling_dataset(
+    df: pd.DataFrame,
+    train_end: str,
+    val_year: int,
+    test_year: int,
+) -> dict[str, pd.DataFrame]:
+    ts = pd.to_datetime(df["ts"], errors="coerce")
+    train_end_ts = pd.Timestamp(train_end).replace(hour=23, minute=59, second=59, microsecond=999999)
+    return {
+        "train": df[ts <= train_end_ts].copy(),
+        "validation": df[ts.dt.year == val_year].copy(),
+        "test": df[ts.dt.year == test_year].copy(),
+    }
+
+
+def _date_range(df: pd.DataFrame) -> dict[str, str | None]:
+    if df.empty:
+        return {"min": None, "max": None}
+    ts = pd.to_datetime(df["ts"], errors="coerce")
+    return {
+        "min": ts.min().isoformat() if pd.notna(ts.min()) else None,
+        "max": ts.max().isoformat() if pd.notna(ts.max()) else None,
+    }
+
+
+def create_feature_metadata(
+    modeling_df: pd.DataFrame,
+    splits: dict[str, pd.DataFrame],
+    max_delay_minutes: int,
+    train_end: str,
+    val_year: int,
+    test_year: int,
+) -> dict[str, Any]:
+    """Create metadata describing the modeling dataset contract."""
+    return {
+        "target_column": TARGET_COLUMN,
+        "optional_secondary_target": SECONDARY_TARGET_COLUMN,
+        "feature_columns": FEATURE_COLUMNS,
+        "excluded_columns": EXCLUDED_COLUMNS,
+        "leakage_sensitive_columns": LEAKAGE_SENSITIVE_COLUMNS,
+        "max_delay_threshold": {
+            "column": TARGET_COLUMN,
+            "minimum_inclusive": 0,
+            "maximum_inclusive": max_delay_minutes,
+        },
+        "split_definitions": {
+            "train": f"ts <= {train_end}",
+            "validation": f"year(ts) == {val_year}",
+            "test": f"year(ts) == {test_year}",
+        },
+        "row_counts_by_split": {
+            split_name: int(len(split_df)) for split_name, split_df in splits.items()
+        },
+        "date_ranges_by_split": {
+            split_name: _date_range(split_df) for split_name, split_df in splits.items()
+        },
+        "modeling_dataset_rows": int(len(modeling_df)),
+        "modeling_dataset_date_range": _date_range(modeling_df),
+        "categorical_columns": MAIN_CATEGORICAL_FEATURES,
+        "numeric_columns": NUMERIC_FEATURES,
+        "historical_feature_definitions": {
+            "prior_route_mean_delay": "Expanding mean Min Delay for prior rows with the same Route.",
+            "prior_route_hour_mean_delay": "Expanding mean Min Delay for prior rows with the same Route and hour.",
+            "prior_incident_mean_delay": "Expanding mean Min Delay for prior rows with the same Incident.",
+            "prior_mode_mean_delay": "Expanding mean Min Delay for prior rows with the same mode.",
+            "prior_global_mean_delay": "Expanding mean Min Delay over all prior rows.",
+            "prior_route_hour_7d_mean_delay": (
+                "Mean Min Delay from prior incidents with the same Route and hour whose "
+                "timestamps are within the previous 7 calendar days and strictly before the current row. "
+                "Missing values fall back to prior route mean, then prior mode mean, then prior global mean."
+            ),
+        },
+        "generated_timestamp": pd.Timestamp.now(tz="UTC").isoformat(),
+    }
+
+
+def write_feature_outputs(
+    input_path: Path,
+    output_dir: Path,
+    max_delay_minutes: int,
+    train_end: str,
+    val_year: int,
+    test_year: int,
+) -> None:
+    cleaned = load_cleaned_delays(input_path)
+    modeling_df = build_feature_frame(cleaned, max_delay_minutes=max_delay_minutes)
+    splits = split_modeling_dataset(
+        modeling_df,
+        train_end=train_end,
+        val_year=val_year,
+        test_year=test_year,
+    )
+    metadata = create_feature_metadata(
+        modeling_df=modeling_df,
+        splits=splits,
+        max_delay_minutes=max_delay_minutes,
+        train_end=train_end,
+        val_year=val_year,
+        test_year=test_year,
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    modeling_df.to_csv(output_dir / "modeling_dataset.csv", index=False)
+    splits["train"].to_csv(output_dir / "train.csv", index=False)
+    splits["validation"].to_csv(output_dir / "validation.csv", index=False)
+    splits["test"].to_csv(output_dir / "test.csv", index=False)
+    (output_dir / "feature_metadata.json").write_text(
+        json.dumps(metadata, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build leakage-safe TTC modeling features.")
+    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--max-delay-minutes", type=int, default=DEFAULT_MAX_DELAY_MINUTES)
+    parser.add_argument("--train-end", type=str, default=DEFAULT_TRAIN_END)
+    parser.add_argument("--val-year", type=int, default=DEFAULT_VAL_YEAR)
+    parser.add_argument("--test-year", type=int, default=DEFAULT_TEST_YEAR)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    write_feature_outputs(
+        input_path=args.input,
+        output_dir=args.output_dir,
+        max_delay_minutes=args.max_delay_minutes,
+        train_end=args.train_end,
+        val_year=args.val_year,
+        test_year=args.test_year,
+    )
+
+
+if __name__ == "__main__":
+    main()

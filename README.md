@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project is currently in the data-cleaning pipeline phase. The repository now has a production-style structure for later data, feature, modeling, API, and frontend work, but modeling, SHAP explainability, FastAPI, and frontend code are not implemented yet.
+The project currently has reproducible data-cleaning, target-diagnostics, and leakage-safe feature-building scripts. Model training, SHAP explainability, FastAPI, and frontend code are not implemented yet.
 
 ## Project Structure
 
@@ -78,9 +78,33 @@ python3 -m src.features.diagnose_target \
 
 This writes target diagnostics under `reports/target_diagnostics/`. The command does not train models.
 
+## Feature Building
+
+Build the Phase 5 modeling-ready dataset and chronological train/validation/test splits:
+
+```bash
+python3 -m src.features.build_features \
+  --input data/processed/ttc_delays_cleaned.csv \
+  --output-dir data/processed/modeling \
+  --max-delay-minutes 240
+```
+
+This creates generated files under `data/processed/modeling/`:
+
+```text
+modeling_dataset.csv
+train.csv
+validation.csv
+test.csv
+feature_metadata.json
+```
+
+The feature-building step applies the documented `0 <= Min Delay <= 240` modeling target policy and creates leakage-safe historical features using prior rows only. It does not train models.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
 - [Current state audit](docs/current_state_audit.md)
 - [Model design](docs/model_design.md)
 - [Modeling data policy](docs/modeling_data_policy.md)
+- [Feature engineering](docs/feature_engineering.md)

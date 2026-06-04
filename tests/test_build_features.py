@@ -1,0 +1,118 @@
+import pandas as pd
+
+from src.features.build_features import (
+    FEATURE_COLUMNS,
+    create_feature_metadata,
+    create_modeling_dataset,
+    build_feature_frame,
+    split_modeling_dataset,
+)
+
+
+def _sample_frame():
+    return pd.DataFrame(
+        {
+            "mode": ["bus", "bus", "bus", "streetcar", "streetcar"],
+            "ts": [
+                "2022-12-31 23:00:00",
+                "2023-01-01 08:00:00",
+                "2023-01-02 08:00:00",
+                "2024-01-01 09:00:00",
+                "2025-01-01 09:00:00",
+            ],
+            "Date": [
+                "2022-12-31",
+                "2023-01-01",
+                "2023-01-02",
+                "2024-01-01",
+                "2025-01-01",
+            ],
+            "Route": ["1", "1", "1", "501", "501"],
+            "Direction": ["N/B", "N/B", "N/B", "E/B", "E/B"],
+            "Location": ["A", "A", "A", "B", "B"],
+            "Incident": ["Delay", "Delay", "Delay", "Mechanical", "Mechanical"],
+            "Min Delay": [10, 20, 30, 40, 300],
+            "Min Gap": [99, 99, 99, 99, 99],
+            "Vehicle": ["100", "101", "102", "200", "201"],
+            "is_holiday": [0, 1, 0, 1, 0],
+            "source_file": ["x.xlsx"] * 5,
+            "source_sheet": [1] * 5,
+        }
+    )
+
+
+def test_create_modeling_dataset_filters_target_threshold_without_mutating_source():
+    source = _sample_frame()
+
+    modeled = create_modeling_dataset(source, max_delay_minutes=240)
+
+    assert len(modeled) == 4
+    assert modeled["Min Delay"].max() == 40
+    assert len(source) == 5
+
+
+def test_split_modeling_dataset_uses_chronological_definitions():
+    modeled = create_modeling_dataset(_sample_frame(), max_delay_minutes=240)
+
+    splits = split_modeling_dataset(
+        modeled,
+        train_end="2022-12-31",
+        val_year=2023,
+        test_year=2024,
+    )
+
+    assert len(splits["train"]) == 1
+    assert splits["train"]["ts"].dt.year.tolist() == [2022]
+    assert splits["validation"]["ts"].dt.year.tolist() == [2023, 2023]
+    assert splits["test"]["ts"].dt.year.tolist() == [2024]
+
+
+def test_historical_features_do_not_use_current_row():
+    featured = build_feature_frame(_sample_frame(), max_delay_minutes=240)
+
+    first_route_hour = featured[
+        (featured["Route"] == "1") & (featured["hour"] == 8)
+    ].iloc[0]
+    second_route_hour = featured[
+        (featured["Route"] == "1") & (featured["hour"] == 8)
+    ].iloc[1]
+
+    assert pd.isna(first_route_hour["prior_route_hour_mean_delay"])
+    assert second_route_hour["prior_route_hour_mean_delay"] == 20
+    assert second_route_hour["prior_route_hour_7d_mean_delay"] == 20
+    assert second_route_hour["prior_route_mean_delay"] == 15
+    assert second_route_hour["prior_global_mean_delay"] == 15
+
+
+def test_min_gap_is_excluded_from_main_feature_list():
+    assert "Min Gap" not in FEATURE_COLUMNS
+
+
+def test_create_feature_metadata_contains_expected_contract():
+    featured = build_feature_frame(_sample_frame(), max_delay_minutes=240)
+    splits = split_modeling_dataset(
+        featured,
+        train_end="2022-12-31",
+        val_year=2023,
+        test_year=2024,
+    )
+
+    metadata = create_feature_metadata(
+        modeling_df=featured,
+        splits=splits,
+        max_delay_minutes=240,
+        train_end="2022-12-31",
+        val_year=2023,
+        test_year=2024,
+    )
+
+    assert metadata["target_column"] == "Min Delay"
+    assert metadata["max_delay_threshold"]["maximum_inclusive"] == 240
+    assert "Min Gap" not in metadata["feature_columns"]
+    assert "Min Gap" in metadata["leakage_sensitive_columns"]
+    assert metadata["row_counts_by_split"] == {
+        "train": 1,
+        "validation": 2,
+        "test": 1,
+    }
+    assert "prior_route_hour_7d_mean_delay" in metadata["historical_feature_definitions"]
