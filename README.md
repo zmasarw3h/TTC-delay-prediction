@@ -101,6 +101,18 @@ feature_metadata.json
 
 The feature-building step applies the documented `0 <= Min Delay <= 240` modeling target policy and creates leakage-safe historical features using prior rows only. It does not train models.
 
+## Baseline Evaluation
+
+Evaluate Phase 6A historical baseline predictors on the existing validation and test splits:
+
+```bash
+python3 -m src.models.evaluate_baselines \
+  --modeling-dir data/processed/modeling \
+  --output-dir reports/baselines
+```
+
+This writes baseline metrics under `reports/baselines/`. The baseline step uses existing leakage-safe historical features and does not train XGBoost or any other ML model.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
@@ -108,3 +120,4 @@ The feature-building step applies the documented `0 <= Min Delay <= 240` modelin
 - [Model design](docs/model_design.md)
 - [Modeling data policy](docs/modeling_data_policy.md)
 - [Feature engineering](docs/feature_engineering.md)
+- [Modeling baselines](docs/modeling_baselines.md)
