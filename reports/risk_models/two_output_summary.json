@@ -1,0 +1,146 @@
+{
+  "generated_timestamp": "2026-06-04T21:22:34.594458+00:00",
+  "note": "Phase 7B two-output model; not Optuna tuning and not SHAP explainability.",
+  "regression_metrics": [
+    {
+      "split": "validation",
+      "mae": 7.396623957149511,
+      "rmse": 17.45824318894663,
+      "r2": 0.2582150944636612,
+      "mean_error": -3.2879727742543032,
+      "median_absolute_error": 3.045792579650879,
+      "p90_absolute_error": 15.047721099853515,
+      "p95_absolute_error": 24.833276319503778,
+      "row_count": 70063
+    },
+    {
+      "split": "test",
+      "mae": 7.876402329710832,
+      "rmse": 18.65245158157398,
+      "r2": 0.2630233136756407,
+      "mean_error": -3.2130055301248017,
+      "median_absolute_error": 3.386561393737793,
+      "p90_absolute_error": 15.407927036285399,
+      "p95_absolute_error": 25.722073817253094,
+      "row_count": 73134
+    }
+  ],
+  "classification_metrics": [
+    {
+      "split": "validation",
+      "threshold_minutes": 30,
+      "selected_probability_cutoff": 0.7,
+      "positive_rate": 0.1027789275366456,
+      "roc_auc": 0.8966549434054571,
+      "pr_auc": 0.5406887524343176,
+      "log_loss": 0.48825289573302166,
+      "brier_score": 0.1529092491453152,
+      "precision": 0.4285030704202887,
+      "recall": 0.7461463685599222,
+      "f1": 0.5443768996960486,
+      "accuracy": 0.8716298188772962,
+      "true_positives": 5373,
+      "false_positives": 7166,
+      "true_negatives": 55696,
+      "false_negatives": 1828,
+      "row_count": 70063
+    },
+    {
+      "split": "test",
+      "threshold_minutes": 30,
+      "selected_probability_cutoff": 0.7,
+      "positive_rate": 0.1011841277654716,
+      "roc_auc": 0.8886367846990204,
+      "pr_auc": 0.5184975879751089,
+      "log_loss": 0.5208775291775342,
+      "brier_score": 0.16455942239176327,
+      "precision": 0.4051515373890071,
+      "recall": 0.7460810810810811,
+      "f1": 0.5251343510724307,
+      "accuracy": 0.8634697951705089,
+      "true_positives": 5521,
+      "false_positives": 8106,
+      "true_negatives": 57628,
+      "false_negatives": 1879,
+      "row_count": 73134
+    },
+    {
+      "split": "validation",
+      "threshold_minutes": 60,
+      "selected_probability_cutoff": 0.9,
+      "positive_rate": 0.030344118864450566,
+      "roc_auc": 0.9466619446041751,
+      "pr_auc": 0.38844826931352805,
+      "log_loss": 0.3316597431093761,
+      "brier_score": 0.08921362559058461,
+      "precision": 0.340390203403902,
+      "recall": 0.7714016933207902,
+      "f1": 0.47235023041474655,
+      "accuracy": 0.9477042090689808,
+      "true_positives": 1640,
+      "false_positives": 3178,
+      "true_negatives": 64759,
+      "false_negatives": 486,
+      "row_count": 70063
+    },
+    {
+      "split": "test",
+      "threshold_minutes": 60,
+      "selected_probability_cutoff": 0.9,
+      "positive_rate": 0.03276177974676621,
+      "roc_auc": 0.9499989491896808,
+      "pr_auc": 0.42000077287024407,
+      "log_loss": 0.3391462701460003,
+      "brier_score": 0.09014802847471438,
+      "precision": 0.3513034225926583,
+      "recall": 0.8267946577629383,
+      "f1": 0.4930927193528314,
+      "accuracy": 0.9443077091366533,
+      "true_positives": 1981,
+      "false_positives": 3658,
+      "true_negatives": 67080,
+      "false_negatives": 415,
+      "row_count": 73134
+    }
+  ],
+  "selected_probability_thresholds": {
+    "30": {
+      "probability_cutoff": 0.7,
+      "selection_rule": "Validation-only: prefer recall >= 0.70; among qualifying cutoffs choose highest F1; otherwise choose highest F1.",
+      "met_min_recall": true,
+      "validation_recall": 0.7461463685599222,
+      "validation_f1": 0.5443768996960486
+    },
+    "60": {
+      "probability_cutoff": 0.9,
+      "selection_rule": "Validation-only: prefer recall >= 0.70; among qualifying cutoffs choose highest F1; otherwise choose highest F1.",
+      "met_min_recall": true,
+      "validation_recall": 0.7714016933207902,
+      "validation_f1": 0.47235023041474655
+    }
+  },
+  "risk_band_definitions": {
+    "low": {
+      "min_probability": 0.0,
+      "max_probability": 0.2
+    },
+    "medium": {
+      "min_probability": 0.2,
+      "max_probability": 0.5
+    },
+    "high": {
+      "min_probability": 0.5,
+      "max_probability": 1.0
+    }
+  },
+  "output_files": [
+    "regression_metrics.csv",
+    "classification_metrics.csv",
+    "classification_threshold_table.csv",
+    "selected_classification_thresholds.json",
+    "risk_band_summary.csv",
+    "two_output_predictions_validation.csv",
+    "two_output_predictions_test.csv",
+    "two_output_summary.json"
+  ]
+}
