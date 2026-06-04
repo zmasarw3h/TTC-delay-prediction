@@ -8,6 +8,9 @@ data/processed/*
 # Model and pipeline artifacts
 artifacts/*
 !artifacts/.gitkeep
+!artifacts/models/
+artifacts/models/*
+!artifacts/models/.gitkeep
 *.joblib
 *.pkl
 *.pickle
@@ -21,6 +24,8 @@ reports/target_diagnostics/*
 !reports/target_diagnostics/.gitkeep
 reports/baselines/*
 !reports/baselines/.gitkeep
+reports/models/*
+!reports/models/.gitkeep
 *.png
 *.jpg
 *.jpeg

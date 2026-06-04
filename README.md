@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, and leakage-safe feature-building scripts. Model training, SHAP explainability, FastAPI, and frontend code are not implemented yet.
+The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, and first fixed-configuration model-training scripts. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
 
 ## Project Structure
 
@@ -113,6 +113,20 @@ python3 -m src.models.evaluate_baselines \
 
 This writes baseline metrics under `reports/baselines/`. The baseline step uses existing leakage-safe historical features and does not train XGBoost or any other ML model.
 
+## First Model Training
+
+Train the Phase 6B fixed-configuration XGBoost model using the existing modeling splits:
+
+```bash
+python3 -m src.models.train_model \
+  --modeling-dir data/processed/modeling \
+  --reports-dir reports/models \
+  --artifacts-dir artifacts/models \
+  --baseline-report reports/baselines/baseline_metrics.json
+```
+
+This writes local model reports under `reports/models/` and the local model artifact under `artifacts/models/`. This is the first fixed XGBoost model, not an Optuna-tuned model.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
@@ -121,3 +135,4 @@ This writes baseline metrics under `reports/baselines/`. The baseline step uses 
 - [Modeling data policy](docs/modeling_data_policy.md)
 - [Feature engineering](docs/feature_engineering.md)
 - [Modeling baselines](docs/modeling_baselines.md)
+- [Model training](docs/model_training.md)
