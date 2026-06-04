@@ -15,11 +15,11 @@ The notebook is an exploratory end-to-end prototype. It currently:
 - Fetches weather data with `meteostat`.
 - Merges weather features into the bus and streetcar delay data by `Date` and `hour`.
 - Creates separate bus and streetcar modeling frames.
-- Engineers cyclical time features and a 7-day route-hour historical delay feature.
+- Engineers cyclical time features and a route-hour historical delay feature named `delay_ma7`.
 - Builds XGBoost pipelines with numeric, binary, one-hot categorical, and target-encoded categorical features.
 - Runs Optuna tuning with `TimeSeriesSplit`.
 - Evaluates model output with MAE, RMSE, and R2.
-- Computes a route-hour 7-day rolling baseline.
+- Computes a route-hour rolling baseline using prior observations.
 - Generates plots for predictions, residuals, MAE comparison, feature importance, and SHAP summaries.
 
 The notebook also contains some unrelated or unfinished exploratory work, including a local JSON events file read near the end.
@@ -113,16 +113,16 @@ The notebook includes:
 - MAE.
 - RMSE.
 - R2.
-- Baseline route-hour 7-day rolling MAE.
+- Baseline route-hour rolling MAE.
 - Manual improvement calculations versus baseline.
 
 Stored notebook outputs include:
 
 - Streetcar Optuna CV best MAE around `3.03`.
-- Streetcar route-hour 7-day baseline MAE around `15.34`.
+- Streetcar route-hour rolling baseline MAE around `15.34`.
 - Bus Optuna CV best MAE around `3.17`.
 - Bus test MAE around `3.33`, RMSE around `16.61`, and R2 around `0.891`.
-- Bus route-hour 7-day baseline MAE around `16.38`.
+- Bus route-hour rolling baseline MAE around `16.38`.
 - Manual improvement calculations of roughly `80.4%` and `84.2%` better than baseline.
 
 These numbers should be treated as provisional until the pipeline is made reproducible and leakage-safe.
@@ -150,6 +150,8 @@ The notebook has some good leakage-aware intent, especially using `shift(1)` bef
 
 - `Min Gap` is included as a numeric model input. It should be excluded unless it is confirmed to be known at incident report time.
 - Target encoding for `Incident` and `Location` must be fit inside training folds only. The pipeline helps, but this must be verified after the data split design is finalized.
+- The rolling `delay_ma7` feature is computed with `shift(1).rolling(7*24)` within each `Route` and `hour` group. This is row-count based, meaning it uses the previous 168 records in that route-hour group, not necessarily the previous 7 calendar days.
+- The final pipeline should replace the current `delay_ma7` logic with a clearly defined historical feature: either a true time-window rolling average or a fixed prior-observation rolling average. For resume clarity, a true 7-day time-window average is easier to explain.
 - The rolling `delay_ma7` feature is computed on the full sorted dataset before final train/test slicing. `shift(1)` prevents same-row leakage, but split-aware historical feature generation still needs to be formalized.
 - Fallback filling for `delay_ma7` uses group means computed across the full dataset, which can leak future target information.
 - Last-90-days testing is useful for exploration but does not match the recommended 2014-2022 / 2023 / 2024 split.
@@ -178,6 +180,7 @@ Keep and adapt:
 - Timestamp parsing and chronological sorting.
 - Time features such as hour, day, month, holiday, and cyclical encodings.
 - Weather feature idea, after making the fetch/cache process reproducible.
+- Historical route-hour delay feature idea, after replacing the current row-count window with a clearly documented time-window or prior-observation design.
 - XGBoost as the main model candidate.
 - MAE as the main metric.
 - Baseline comparison using route-hour historical averages.

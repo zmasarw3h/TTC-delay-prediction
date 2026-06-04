@@ -98,11 +98,17 @@ If future data inspection shows that either mode has incomplete or unreliable 20
 
 ## Recommended Baseline
 
-The main baseline should be a 7-day route-hour rolling average with fallback levels.
+The main baseline should be a historical route-hour average with fallback levels.
+
+The preferred portfolio baseline is a true 7-day time-window average: prior incidents from the same route and hour during the previous 7 calendar days. This is easier to explain than the current notebook's row-count approach.
+
+The current notebook attempts to create a historical route-hour delay feature using `shift(1).rolling(7*24)`, but because it is grouped by `Route` and `hour`, this means the previous 168 records within that route-hour group, not necessarily the previous 7 calendar days.
+
+If a true time-window feature is difficult because of sparse route-hour groups, use a fixed prior-observation average instead, such as the prior N incidents for the same route-hour. Document the chosen definition clearly.
 
 Recommended fallback order:
 
-1. Prior 7-day route-hour average.
+1. Prior 7-day route-hour time-window average, or documented prior-N route-hour average.
 2. Prior route average.
 3. Prior mode average.
 4. Prior global average.
@@ -188,6 +194,10 @@ Explainability should be framed as model behavior, not causal proof.
 ## API Design Preview
 
 Planned FastAPI endpoints:
+
+Weather caveat:
+
+For historical evaluation, weather features are joined from recorded weather observations. For live API use, weather inputs should be supplied by the user, retrieved from a weather API, or approximated using the most recent available observation or forecast available at report time.
 
 ### `GET /health`
 
