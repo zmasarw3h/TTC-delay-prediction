@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, and fixed-model error-analysis scripts. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
+The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, and fixed model-improvement experiment scripts. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
 
 ## Project Structure
 
@@ -141,6 +141,34 @@ python3 -m src.models.analyze_errors \
 
 This writes generated error-analysis reports under `reports/error_analysis/`. The command scores the existing model artifact only; it does not train or modify the model.
 
+## Model Improvement Experiments
+
+Run Phase 7A fixed model-improvement experiments:
+
+```bash
+python3 -m src.models.run_experiments \
+  --modeling-dir data/processed/modeling \
+  --baseline-report reports/baselines/baseline_metrics.json \
+  --fixed-model-report reports/models/model_metrics.json \
+  --reports-dir reports/experiments \
+  --artifacts-dir artifacts/experiments \
+  --selection-metric validation_mae
+```
+
+This compares predefined modeling strategies for severe-delay handling, streetcar performance, and regression-to-the-mean behavior. It does not perform broad hyperparameter search or Optuna tuning. Validation metrics select the experiment; test metrics are reported for the selected/fixed experiment comparison workflow.
+
+Generated reports:
+
+```text
+reports/experiments/experiment_metrics.csv
+reports/experiments/experiment_metrics_by_mode.csv
+reports/experiments/experiment_high_delay_metrics.csv
+reports/experiments/experiment_selection.json
+reports/experiments/experiment_summary.json
+```
+
+The selected experiment artifact is written to `artifacts/experiments/selected_experiment.joblib`. The existing Phase 6B fixed model artifact is not overwritten.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
@@ -151,3 +179,4 @@ This writes generated error-analysis reports under `reports/error_analysis/`. Th
 - [Modeling baselines](docs/modeling_baselines.md)
 - [Model training](docs/model_training.md)
 - [Model error analysis](docs/error_analysis.md)
+- [Model improvement experiments](docs/model_experiments.md)

@@ -31,6 +31,8 @@ reports/error_analysis/*
 !reports/error_analysis/figures/
 reports/error_analysis/figures/*
 !reports/error_analysis/figures/.gitkeep
+reports/experiments/*
+!reports/experiments/.gitkeep
 *.png
 *.jpg
 *.jpeg
