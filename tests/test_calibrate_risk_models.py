@@ -12,6 +12,7 @@ from src.models.calibrate_risk_models import (
     build_calibrated_artifact,
     calibrated_risk_bands,
     expected_calibration_error,
+    parse_args,
     probability_bin_table,
     run_calibration,
     select_calibration_method,
@@ -246,3 +247,18 @@ def test_module_import_is_safe(tmp_path, monkeypatch):
     assert hasattr(module, "run_calibration")
     assert not (tmp_path / "reports").exists()
     assert not (tmp_path / "artifacts").exists()
+
+
+def test_two_output_artifact_cli_alias(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "calibrate_risk_models.py",
+            "--two-output-artifact",
+            "artifacts/risk_models/two_output_model.joblib",
+        ],
+    )
+
+    args = parse_args()
+
+    assert str(args.phase_7b_artifact_path) == "artifacts/risk_models/two_output_model.joblib"

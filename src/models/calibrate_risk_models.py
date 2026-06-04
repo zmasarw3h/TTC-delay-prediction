@@ -762,8 +762,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--modeling-dir", type=Path, default=DEFAULT_MODELING_DIR)
     parser.add_argument(
         "--phase-7b-artifact-path",
+        "--two-output-artifact",
         type=Path,
         default=DEFAULT_PHASE_7B_ARTIFACT_PATH,
+        dest="phase_7b_artifact_path",
+        help="Path to the Phase 7B two-output artifact.",
     )
     parser.add_argument(
         "--selected-regressor-path",
