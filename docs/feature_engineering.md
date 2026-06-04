@@ -53,15 +53,15 @@ Targets:
 
 ## Historical Features
 
-Historical features are target-derived and must be prior-only. The feature-building script sorts rows chronologically and does not use the current row's `Min Delay` in historical features.
+Historical features are target-derived and must be prior-only. The feature-building script uses only rows with `ts < current ts`; rows with the same timestamp as the current row are not allowed to influence each other.
 
 Definitions:
 
-- `prior_route_mean_delay`: expanding mean `Min Delay` from prior rows with the same `Route`
-- `prior_route_hour_mean_delay`: expanding mean `Min Delay` from prior rows with the same `Route` and `hour`
-- `prior_incident_mean_delay`: expanding mean `Min Delay` from prior rows with the same `Incident`
-- `prior_mode_mean_delay`: expanding mean `Min Delay` from prior rows with the same `mode`
-- `prior_global_mean_delay`: expanding mean `Min Delay` from all prior rows
+- `prior_route_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same `Route`
+- `prior_route_hour_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same `Route` and `hour`
+- `prior_incident_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same `Incident`
+- `prior_mode_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same `mode`
+- `prior_global_mean_delay`: mean `Min Delay` from all rows with `ts < current ts`
 - `prior_route_hour_7d_mean_delay`: mean `Min Delay` from prior incidents with the same `Route` and `hour` whose timestamps are within the previous 7 calendar days and strictly before the current row
 
 Fallbacks for `prior_route_hour_7d_mean_delay` are also prior-only: prior route mean, then prior mode mean, then prior global mean.

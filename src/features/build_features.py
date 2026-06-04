@@ -98,15 +98,42 @@ def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
     return featured
 
 
-def _prior_expanding_mean(df: pd.DataFrame, group_columns: list[str] | None = None) -> pd.Series:
+def _prior_timestamp_mean(df: pd.DataFrame, group_columns: list[str] | None = None) -> pd.Series:
+    """Mean target from records with timestamps strictly before each row."""
     target = pd.to_numeric(df[TARGET_COLUMN], errors="coerce")
     if group_columns is None:
-        return target.expanding().mean().shift(1)
+        time_stats = (
+            pd.DataFrame({"ts": df["ts"], TARGET_COLUMN: target})
+            .groupby("ts", dropna=False)[TARGET_COLUMN]
+            .agg(["sum", "count"])
+            .sort_index()
+        )
+        prior_sum = time_stats["sum"].cumsum().shift(1)
+        prior_count = time_stats["count"].cumsum().shift(1)
+        prior_mean_by_ts = prior_sum / prior_count
+        return df["ts"].map(prior_mean_by_ts)
 
-    grouped = target.groupby([df[column] for column in group_columns], dropna=False)
-    cumsum = grouped.cumsum().groupby([df[column] for column in group_columns], dropna=False).shift(1)
-    count = grouped.cumcount()
-    return cumsum / count.replace(0, np.nan)
+    work = df[group_columns + ["ts"]].copy()
+    work[TARGET_COLUMN] = target
+    grouped_stats = (
+        work.groupby(group_columns + ["ts"], dropna=False)[TARGET_COLUMN]
+        .agg(["sum", "count"])
+        .reset_index()
+        .sort_values(group_columns + ["ts"])
+    )
+    grouped = grouped_stats.groupby(group_columns, dropna=False)
+    grouped_stats["_cum_sum"] = grouped["sum"].cumsum()
+    grouped_stats["_cum_count"] = grouped["count"].cumsum()
+    cumulative_grouped = grouped_stats.groupby(group_columns, dropna=False)
+    grouped_stats["_prior_sum"] = cumulative_grouped["_cum_sum"].shift(1)
+    grouped_stats["_prior_count"] = cumulative_grouped["_cum_count"].shift(1)
+    grouped_stats["_prior_mean"] = grouped_stats["_prior_sum"] / grouped_stats["_prior_count"]
+
+    return work.merge(
+        grouped_stats[group_columns + ["ts", "_prior_mean"]],
+        on=group_columns + ["ts"],
+        how="left",
+    )["_prior_mean"].set_axis(df.index)
 
 
 def _prior_route_hour_7d_mean(df: pd.DataFrame) -> pd.Series:
@@ -134,11 +161,11 @@ def _prior_route_hour_7d_mean(df: pd.DataFrame) -> pd.Series:
 def add_historical_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add prior-only target-derived historical features."""
     featured = df.sort_values("ts").reset_index(drop=True).copy()
-    featured["prior_global_mean_delay"] = _prior_expanding_mean(featured)
-    featured["prior_route_mean_delay"] = _prior_expanding_mean(featured, ["Route"])
-    featured["prior_route_hour_mean_delay"] = _prior_expanding_mean(featured, ["Route", "hour"])
-    featured["prior_incident_mean_delay"] = _prior_expanding_mean(featured, ["Incident"])
-    featured["prior_mode_mean_delay"] = _prior_expanding_mean(featured, ["mode"])
+    featured["prior_global_mean_delay"] = _prior_timestamp_mean(featured)
+    featured["prior_route_mean_delay"] = _prior_timestamp_mean(featured, ["Route"])
+    featured["prior_route_hour_mean_delay"] = _prior_timestamp_mean(featured, ["Route", "hour"])
+    featured["prior_incident_mean_delay"] = _prior_timestamp_mean(featured, ["Incident"])
+    featured["prior_mode_mean_delay"] = _prior_timestamp_mean(featured, ["mode"])
 
     route_hour_7d = _prior_route_hour_7d_mean(featured)
     featured["prior_route_hour_7d_mean_delay"] = (
@@ -223,11 +250,11 @@ def create_feature_metadata(
         "categorical_columns": MAIN_CATEGORICAL_FEATURES,
         "numeric_columns": NUMERIC_FEATURES,
         "historical_feature_definitions": {
-            "prior_route_mean_delay": "Expanding mean Min Delay for prior rows with the same Route.",
-            "prior_route_hour_mean_delay": "Expanding mean Min Delay for prior rows with the same Route and hour.",
-            "prior_incident_mean_delay": "Expanding mean Min Delay for prior rows with the same Incident.",
-            "prior_mode_mean_delay": "Expanding mean Min Delay for prior rows with the same mode.",
-            "prior_global_mean_delay": "Expanding mean Min Delay over all prior rows.",
+            "prior_route_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same Route.",
+            "prior_route_hour_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same Route and hour.",
+            "prior_incident_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same Incident.",
+            "prior_mode_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same mode.",
+            "prior_global_mean_delay": "Mean Min Delay over all rows with ts strictly before the current row.",
             "prior_route_hour_7d_mean_delay": (
                 "Mean Min Delay from prior incidents with the same Route and hour whose "
                 "timestamps are within the previous 7 calendar days and strictly before the current row. "

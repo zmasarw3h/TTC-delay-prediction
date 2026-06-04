@@ -84,6 +84,48 @@ def test_historical_features_do_not_use_current_row():
     assert second_route_hour["prior_global_mean_delay"] == 15
 
 
+def test_historical_features_do_not_use_same_timestamp_rows():
+    frame = pd.DataFrame(
+        {
+            "mode": ["bus", "bus", "bus", "bus"],
+            "ts": [
+                "2023-01-01 08:00:00",
+                "2023-01-02 08:00:00",
+                "2023-01-02 08:00:00",
+                "2023-01-03 08:00:00",
+            ],
+            "Route": ["1", "1", "1", "1"],
+            "Direction": ["N/B", "N/B", "N/B", "N/B"],
+            "Location": ["A", "A", "A", "A"],
+            "Incident": ["Delay", "Delay", "Delay", "Delay"],
+            "Min Delay": [10, 20, 100, 40],
+            "Min Gap": [99, 99, 99, 99],
+            "Vehicle": ["100", "101", "102", "103"],
+            "is_holiday": [0, 0, 0, 0],
+        }
+    )
+
+    featured = build_feature_frame(frame, max_delay_minutes=240)
+    same_timestamp_rows = featured[featured["ts"] == pd.Timestamp("2023-01-02 08:00:00")]
+    next_timestamp_row = featured[featured["ts"] == pd.Timestamp("2023-01-03 08:00:00")].iloc[0]
+
+    for column in [
+        "prior_route_mean_delay",
+        "prior_route_hour_mean_delay",
+        "prior_incident_mean_delay",
+        "prior_mode_mean_delay",
+        "prior_global_mean_delay",
+        "prior_route_hour_7d_mean_delay",
+    ]:
+        assert same_timestamp_rows[column].tolist() == [10.0, 10.0]
+
+    assert next_timestamp_row["prior_route_mean_delay"] == 130 / 3
+    assert next_timestamp_row["prior_route_hour_mean_delay"] == 130 / 3
+    assert next_timestamp_row["prior_incident_mean_delay"] == 130 / 3
+    assert next_timestamp_row["prior_mode_mean_delay"] == 130 / 3
+    assert next_timestamp_row["prior_global_mean_delay"] == 130 / 3
+
+
 def test_min_gap_is_excluded_from_main_feature_list():
     assert "Min Gap" not in FEATURE_COLUMNS
 
