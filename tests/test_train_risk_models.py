@@ -179,5 +179,6 @@ def test_module_import_is_safe(tmp_path, monkeypatch):
     module = importlib.reload(train_risk_models)
 
     assert hasattr(module, "run_risk_model_training")
+    assert hasattr(module, "LogTargetRegressor")
     assert not (tmp_path / "reports").exists()
     assert not (tmp_path / "artifacts").exists()

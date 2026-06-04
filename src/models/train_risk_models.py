@@ -25,7 +25,11 @@ from sklearn.metrics import (
 )
 from sklearn.pipeline import Pipeline
 
-from src.models.run_experiments import regression_metrics, train_log_target_model
+from src.models.run_experiments import (
+    LogTargetRegressor,
+    regression_metrics,
+    train_log_target_model,
+)
 from src.models.train_model import (
     TARGET_COLUMN_FALLBACK,
     build_preprocessor,
