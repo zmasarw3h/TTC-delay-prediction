@@ -26,6 +26,11 @@ reports/baselines/*
 !reports/baselines/.gitkeep
 reports/models/*
 !reports/models/.gitkeep
+reports/error_analysis/*
+!reports/error_analysis/.gitkeep
+!reports/error_analysis/figures/
+reports/error_analysis/figures/*
+!reports/error_analysis/figures/.gitkeep
 *.png
 *.jpg
 *.jpeg

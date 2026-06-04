@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, and first fixed-configuration model-training scripts. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
+The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, and fixed-model error-analysis scripts. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
 
 ## Project Structure
 
@@ -127,6 +127,20 @@ python3 -m src.models.train_model \
 
 This writes local model reports under `reports/models/` and the local model artifact under `artifacts/models/`. This is the first fixed XGBoost model, not an Optuna-tuned model.
 
+## Model Error Analysis
+
+Analyze Phase 6C validation/test residuals for the existing fixed XGBoost model:
+
+```bash
+python3 -m src.models.analyze_errors \
+  --modeling-dir data/processed/modeling \
+  --model-path artifacts/models/xgb_delay_model.joblib \
+  --baseline-report reports/baselines/baseline_metrics.json \
+  --output-dir reports/error_analysis
+```
+
+This writes generated error-analysis reports under `reports/error_analysis/`. The command scores the existing model artifact only; it does not train or modify the model.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
@@ -136,3 +150,4 @@ This writes local model reports under `reports/models/` and the local model arti
 - [Feature engineering](docs/feature_engineering.md)
 - [Modeling baselines](docs/modeling_baselines.md)
 - [Model training](docs/model_training.md)
+- [Model error analysis](docs/error_analysis.md)
