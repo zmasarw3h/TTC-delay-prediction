@@ -23,15 +23,16 @@ The main task is regression:
 
 The recommended primary model is XGBoost regression after a baseline is established.
 
-## Optional Secondary Task
+## Severe-Delay Risk Task
 
-An optional secondary task is severe-delay risk classification.
+The current two-output direction adds severe-delay risk classification alongside the expected-delay regression output.
 
-Example target:
+Risk targets:
 
-- `severe_delay = Min Delay >= 15`
+- `Min Delay >= 30`
+- `Min Delay >= 60`
 
-This can support a product-style output such as "high risk of severe delay." It should be treated as secondary to the regression model unless the project direction changes.
+These classifiers support product-style risk outputs while keeping regression as the expected-delay estimate. Operating probability thresholds must be selected on validation data only, then applied once to test.
 
 ## Safe Feature Categories
 

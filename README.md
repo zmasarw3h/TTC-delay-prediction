@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, and fixed model-improvement experiment scripts. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
+The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, and a Phase 7B two-output delay/risk modeling script. Optuna tuning, SHAP explainability, FastAPI, and frontend code are not implemented yet.
 
 ## Project Structure
 
@@ -169,6 +169,36 @@ reports/experiments/experiment_summary.json
 
 The selected experiment artifact is written to `artifacts/experiments/selected_experiment.joblib`. The existing Phase 6B fixed model artifact is not overwritten.
 
+## Two-Output Delay And Risk Model
+
+Train the Phase 7B two-output model:
+
+```bash
+python3 -m src.models.train_risk_models \
+  --modeling-dir data/processed/modeling \
+  --selected-regressor-path artifacts/experiments/selected_experiment.joblib \
+  --reports-dir reports/risk_models \
+  --artifacts-dir artifacts/risk_models \
+  --thresholds 30,60
+```
+
+This combines the selected Phase 7A expected-delay regressor with severe-delay risk classifiers for `Min Delay >= 30` and `Min Delay >= 60`. Operating probability thresholds are selected on validation data only, then applied to test.
+
+Generated reports:
+
+```text
+reports/risk_models/regression_metrics.csv
+reports/risk_models/classification_metrics.csv
+reports/risk_models/classification_threshold_table.csv
+reports/risk_models/selected_classification_thresholds.json
+reports/risk_models/risk_band_summary.csv
+reports/risk_models/two_output_predictions_validation.csv
+reports/risk_models/two_output_predictions_test.csv
+reports/risk_models/two_output_summary.json
+```
+
+The two-output artifact is written to `artifacts/risk_models/two_output_model.joblib`. API and frontend code are still not implemented.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
@@ -180,3 +210,4 @@ The selected experiment artifact is written to `artifacts/experiments/selected_e
 - [Model training](docs/model_training.md)
 - [Model error analysis](docs/error_analysis.md)
 - [Model improvement experiments](docs/model_experiments.md)
+- [Two-output delay and risk model](docs/two_output_model.md)
