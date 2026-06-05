@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+import zipfile
 
 import joblib
 import numpy as np
@@ -105,8 +106,91 @@ def fake_artifact_path(tmp_path):
 @pytest.fixture()
 def client(fake_artifact_path, monkeypatch):
     monkeypatch.setenv("TTC_MODEL_ARTIFACT_PATH", str(fake_artifact_path))
+    monkeypatch.setenv("TTC_GTFS_ZIP_PATH", str(fake_artifact_path.parent / "missing_gtfs.zip"))
     app_module = importlib.import_module("src.api.app")
     app_module.prediction_service = app_module.CalibratedDelayPredictionService()
+    app_module.load_route_metadata_index.cache_clear()
+    app_module.load_route_stop_index.cache_clear()
+    return TestClient(app_module.app)
+
+
+@pytest.fixture()
+def fake_gtfs_path(tmp_path):
+    path = tmp_path / "fake_ttc_gtfs.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "routes.txt",
+            "\n".join(
+                [
+                    "route_id,route_short_name,route_long_name,route_type",
+                    "r1,1,Yonge-University Line,1",
+                    "r4,4,Sheppard Line,3",
+                    "r6,6,Finch West Line,0",
+                    "r29,29,Dufferin,3",
+                    "r501,501,Queen,0",
+                ]
+            ),
+        )
+        archive.writestr(
+            "trips.txt",
+            "\n".join(
+                [
+                    "route_id,service_id,trip_id",
+                    "r1,weekday,t1",
+                    "r4,weekday,t4",
+                    "r6,weekday,t6",
+                    "r29,weekday,t29",
+                    "r29,weekday,t29s",
+                    "r501,weekday,t501",
+                    "r501,weekday,t501w",
+                ]
+            ),
+        )
+        archive.writestr(
+            "stop_times.txt",
+            "\n".join(
+                [
+                    "trip_id,arrival_time,departure_time,stop_id,stop_sequence",
+                    "t1,08:00:00,08:00:00,s_subway,1",
+                    "t4,08:00:00,08:00:00,s_sheppard,1",
+                    "t6,08:00:00,08:00:00,s_finch,1",
+                    "t29,08:00:00,08:00:00,s_dufferin_station,1",
+                    "t29,08:02:00,08:02:00,s_dufferin_wilson,2",
+                    "t29s,08:00:00,08:00:00,s_dufferin_wilson,1",
+                    "t29s,08:02:00,08:02:00,s_dufferin_station,2",
+                    "t501,08:00:00,08:00:00,s_queen_spadina,1",
+                    "t501,08:02:00,08:02:00,s_queen_yonge,2",
+                    "t501w,08:00:00,08:00:00,s_queen_yonge,1",
+                    "t501w,08:02:00,08:02:00,s_queen_spadina,2",
+                ]
+            ),
+        )
+        archive.writestr(
+            "stops.txt",
+            "\n".join(
+                [
+                    "stop_id,stop_name,stop_lat,stop_lon",
+                    "s_subway,Union Station,43.645,-79.380",
+                    "s_sheppard,Sheppard-Yonge Station,43.761,-79.410",
+                    "s_finch,Finch West Station,43.765,-79.491",
+                    "s_dufferin_station,Dufferin Station,43.660,-79.435",
+                    "s_dufferin_wilson,Dufferin St at Wilson Ave,43.730,-79.435",
+                    "s_queen_spadina,Queen St West at Spadina Ave,43.648,-79.397",
+                    "s_queen_yonge,Queen St East at Yonge St,43.653,-79.380",
+                ]
+            ),
+        )
+    return path
+
+
+@pytest.fixture()
+def client_with_gtfs(fake_artifact_path, fake_gtfs_path, monkeypatch):
+    monkeypatch.setenv("TTC_MODEL_ARTIFACT_PATH", str(fake_artifact_path))
+    monkeypatch.setenv("TTC_GTFS_ZIP_PATH", str(fake_gtfs_path))
+    app_module = importlib.import_module("src.api.app")
+    app_module.prediction_service = app_module.CalibratedDelayPredictionService()
+    app_module.load_route_metadata_index.cache_clear()
+    app_module.load_route_stop_index.cache_clear()
     return TestClient(app_module.app)
 
 
@@ -148,9 +232,10 @@ def test_root_serves_demo_frontend(client):
     assert "Incident-time TTC delay prediction demo" in response.text
     assert "Model status" not in response.text
     assert "Calibrated two-output service" not in response.text
-    assert response.text.count('data-preset="') == 2
-    assert 'data-preset="bus"' in response.text
-    assert 'data-preset="streetcar"' in response.text
+    assert 'data-preset="' not in response.text
+    assert response.text.count('data-mode="') == 2
+    assert 'data-mode="bus"' in response.text
+    assert 'data-mode="streetcar"' in response.text
 
 
 def test_static_demo_files_are_served(client):
@@ -169,7 +254,7 @@ def test_demo_static_files_exist():
         assert (STATIC_DIR / filename).exists()
 
 
-def test_demo_preset_payloads_do_not_include_leakage_fields():
+def test_demo_static_payload_fields_do_not_include_leakage_fields():
     app_js = (STATIC_DIR / "app.js").read_text()
 
     for field in LEAKAGE_FIELDS:
@@ -248,6 +333,106 @@ def test_model_options_returns_curated_incident_options_only(client):
     assert incident_values == CURATED_INCIDENT_VALUES
     assert "501" not in incident_values
     assert "Mechanical delay at station" not in incident_values
+
+
+def test_route_options_fall_back_to_model_routes_without_gtfs(client):
+    response = client.get("/route-options")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gtfs_available"] is False
+    assert body["routes"] == [
+        {"value": "29", "label": "29", "mode": None},
+        {"value": "501", "label": "501", "mode": None},
+        {"value": "32A", "label": "32A", "mode": None},
+        {"value": "RAD", "label": "RAD", "mode": None},
+    ]
+    assert "GTFS route-stop data is not configured" in body["warning"]
+
+
+def test_route_options_use_gtfs_modes_when_available(client_with_gtfs):
+    response = client_with_gtfs.get("/route-options")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gtfs_available"] is True
+    assert body["routes"] == [
+        {"value": "29", "label": "29 - Dufferin", "mode": "bus"},
+        {"value": "501", "label": "501 - Queen", "mode": "streetcar"},
+    ]
+    route_values = {route["value"] for route in body["routes"]}
+    assert {"1", "4", "6"}.isdisjoint(route_values)
+
+
+def test_route_locations_are_scoped_to_selected_route(client_with_gtfs):
+    response = client_with_gtfs.get("/route-locations", params={"route": "29"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gtfs_available"] is True
+    assert body["normalized_route"] == "29"
+    assert body["mode"] == "bus"
+    assert body["directions"] == [
+        {"value": "N", "label": "North"},
+        {"value": "S", "label": "South"},
+        {"value": "B", "label": "Both / bidirectional"},
+    ]
+    assert body["count"] == 2
+    assert sorted(location["value"] for location in body["locations"]) == [
+        "DUFFERIN STATION",
+        "DUFFERIN STREET AT WILSON AVENUE",
+    ]
+
+
+def test_route_locations_support_base_route_for_branch(client_with_gtfs):
+    response = client_with_gtfs.get("/route-locations", params={"route": "29A"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["normalized_route"] == "29"
+    assert body["count"] == 2
+    assert "Using base route 29 stop list" in body["warning"]
+
+
+def test_route_locations_return_east_west_directions_for_streetcar_route(client_with_gtfs):
+    response = client_with_gtfs.get("/route-locations", params={"route": "501"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "streetcar"
+    assert body["directions"] == [
+        {"value": "E", "label": "East"},
+        {"value": "W", "label": "West"},
+        {"value": "B", "label": "Both / bidirectional"},
+    ]
+
+
+def test_validate_route_location_accepts_stop_on_selected_route(client_with_gtfs):
+    response = client_with_gtfs.post(
+        "/validate-route-location",
+        json={"route": "29", "location": "Dufferin Station"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["accepted_for_prediction"] is True
+    assert body["normalized_route"] == "29"
+    assert body["route_location"] == "DUFFERIN STATION"
+    assert body["warning"] is None
+
+
+def test_validate_route_location_rejects_stop_not_on_selected_route(client_with_gtfs):
+    response = client_with_gtfs.post(
+        "/validate-route-location",
+        json={"route": "29", "location": "Queen St East at Yonge St"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["accepted_for_prediction"] is False
+    assert body["normalized_route"] == "29"
+    assert body["route_location"] is None
+    assert "is not a stop on route 29" in body["warning"]
 
 
 def test_match_location_handles_exact_match(client):

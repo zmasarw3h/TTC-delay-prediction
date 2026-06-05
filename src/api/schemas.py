@@ -88,6 +88,41 @@ class LocationMatchRequest(BaseModel):
     location: str
 
 
+class RouteOptionsResponse(BaseModel):
+    routes: list[dict[str, Any]]
+    gtfs_available: bool
+    source_path: str | None = None
+    warning: str | None = None
+
+
+class RouteLocationsResponse(BaseModel):
+    route: str
+    normalized_route: str
+    mode: str | None = None
+    directions: list[dict[str, str]]
+    locations: list[dict[str, str]]
+    count: int
+    gtfs_available: bool
+    source_path: str | None = None
+    warning: str | None = None
+
+
+class RouteLocationValidationRequest(BaseModel):
+    route: str
+    location: str
+
+
+class RouteLocationValidationResponse(BaseModel):
+    route: str
+    normalized_route: str
+    original_location: str
+    normalized_location: str
+    route_location: str | None
+    route_location_label: str | None
+    accepted_for_prediction: bool
+    warning: str | None
+
+
 class LocationMatchResponse(BaseModel):
     original_location: str
     normalized_location: str

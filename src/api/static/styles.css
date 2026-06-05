@@ -164,11 +164,18 @@ body {
   color: var(--brand-dark);
 }
 
-.preset-row {
+.mode-toggle {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   margin-bottom: 18px;
+}
+
+.mode-toggle > span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
 }
 
 button {
@@ -177,7 +184,7 @@ button {
   cursor: pointer;
 }
 
-.preset-button,
+.mode-button,
 .submit-button,
 .secondary-button,
 .inline-button {
@@ -185,13 +192,13 @@ button {
   font-weight: 800;
 }
 
-.preset-button {
+.mode-button {
   background: #edf2f4;
   color: #213139;
   padding: 9px 12px;
 }
 
-.preset-button.active {
+.mode-button.active {
   background: #1e2a30;
   color: #ffffff;
 }
@@ -218,12 +225,58 @@ button {
   gap: 14px;
 }
 
-label span {
+label span,
+.combo-field > span {
   display: block;
   margin-bottom: 6px;
   color: #2f3f47;
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.combo-field {
+  position: relative;
+}
+
+.combo-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% - 18px);
+  left: 0;
+  right: 0;
+  display: none;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid #cbd6dc;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(23, 32, 38, 0.16);
+}
+
+.combo-menu.open {
+  display: block;
+}
+
+.combo-option {
+  width: 100%;
+  display: block;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 9px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eef2f4;
+}
+
+.combo-option:hover,
+.combo-option:focus-visible {
+  background: #f4f7f8;
+}
+
+.combo-option .muted {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 input,
@@ -258,9 +311,7 @@ button:focus-visible {
 }
 
 .location-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  display: block;
 }
 
 .location-status {

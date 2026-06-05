@@ -10,6 +10,14 @@ data/raw/
     *.xlsx
 ```
 
+The local demo UI can also use a TTC routes and schedules GTFS zip for route-stop validation:
+
+```text
+data/raw/ttc_gtfs.zip
+```
+
+You can alternatively point the API at another local GTFS zip with `TTC_GTFS_ZIP_PATH`. GTFS data is used for UI route-stop validation only; model training and prediction still use the normalized `Route` and `Location` text contract.
+
 The cleaner can read `.xlsx`, `.xlsm`, `.xls`, `.xlsb`, and `.csv` files where the required reader engine is installed. Multi-sheet Excel workbooks are combined automatically.
 
 Run the cleaning pipeline from the repository root:

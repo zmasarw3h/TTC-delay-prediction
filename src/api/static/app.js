@@ -23,6 +23,11 @@ const CURATED_INCIDENTS = [
   "Unknown",
 ];
 
+const MODE_LABELS = {
+  bus: "Bus",
+  streetcar: "Streetcar",
+};
+
 const MODE_OPTIONS = [
   { value: "bus", label: "Bus" },
   { value: "streetcar", label: "Streetcar" },
@@ -36,43 +41,6 @@ const DIRECTION_OPTIONS = [
   { value: "B", label: "Both / bidirectional" },
   { value: "Unknown", label: "Unknown" },
 ];
-
-const PRESETS = {
-  bus: {
-    label: "Bus incident",
-    payload: {
-      mode: "bus",
-      Route: "29",
-      Direction: "N",
-      Incident: "Mechanical",
-      Location: "Dufferin Station",
-      timestamp: "2024-02-03T08:30",
-      prior_route_mean_delay: 10.0,
-      prior_route_hour_mean_delay: 12.0,
-      prior_incident_mean_delay: 9.0,
-      prior_mode_mean_delay: 8.0,
-      prior_global_mean_delay: 7.0,
-      prior_route_hour_7d_mean_delay: 11.0,
-    },
-  },
-  streetcar: {
-    label: "Streetcar incident",
-    payload: {
-      mode: "streetcar",
-      Route: "501",
-      Direction: "E",
-      Incident: "Operations",
-      Location: "Queen St West at Spadina Ave",
-      timestamp: "2024-09-18T17:45",
-      prior_route_mean_delay: 13.5,
-      prior_route_hour_mean_delay: 16.0,
-      prior_incident_mean_delay: 11.5,
-      prior_mode_mean_delay: 10.0,
-      prior_global_mean_delay: 8.4,
-      prior_route_hour_7d_mean_delay: 14.2,
-    },
-  },
-};
 
 const FIELD_NAMES = [
   "mode",
@@ -102,11 +70,20 @@ const serviceNote = document.querySelector("#service-note");
 const form = document.querySelector("#prediction-form");
 const resultsEl = document.querySelector("#results");
 const submitButton = document.querySelector("#submit-button");
-const presetButtons = document.querySelectorAll("[data-preset]");
-const matchLocationButton = document.querySelector("#match-location-button");
+const modeButtons = document.querySelectorAll("[data-mode]");
+const routeInput = document.querySelector("#Route");
+const routeMenu = document.querySelector("#route-menu");
+const modeInput = document.querySelector("#mode");
 const locationStatus = document.querySelector("#location-status");
 const locationInput = document.querySelector("#Location");
+const locationMenu = document.querySelector("#location-menu");
 
+let routeOptions = [];
+let routeStopDataAvailable = false;
+let selectedRoute = null;
+let routeLocations = [];
+let selectedRouteLocation = null;
+let routeLocationValidation = null;
 let locationMatch = null;
 let incidentValues = new Set(CURATED_INCIDENTS);
 let modeValues = new Set(MODE_OPTIONS.map((option) => option.value));
@@ -148,18 +125,13 @@ function setSelectOptions(selectId, options, fallbackOptions = []) {
   return normalized.map((option) => option.value);
 }
 
-function isRouteLike(value) {
-  return /^(\d{1,4}[A-Za-z]{0,2}|RAD)$/.test(String(value).trim());
-}
-
-function setRouteOptions(values) {
-  const list = document.getElementById("route-options");
-  if (!list || !values) return;
-  const routeValues = Array.from(new Set(values.map(String).filter(isRouteLike)));
-  list.innerHTML = routeValues
-    .slice(0, 1000)
-    .map((value) => `<option value="${escapeHtml(value)}"></option>`)
-    .join("");
+function setDirectionOptions(options = DIRECTION_OPTIONS) {
+  const values = setSelectOptions("Direction", options, DIRECTION_OPTIONS);
+  directionValues = new Set(values);
+  const select = document.getElementById("Direction");
+  if (select && !directionValues.has(select.value)) {
+    select.value = values[0] || "";
+  }
 }
 
 function errorMessage(detail, fallback) {
@@ -170,36 +142,111 @@ function errorMessage(detail, fallback) {
   return fallback;
 }
 
+function routeLabel(option) {
+  return option.label && option.label !== option.value ? option.label : option.value;
+}
+
+function setMode(mode) {
+  if (mode && modeValues.has(mode)) {
+    modeInput.value = mode;
+  } else {
+    modeInput.value = "";
+  }
+  modeButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === modeInput.value);
+    button.setAttribute("aria-pressed", String(button.dataset.mode === modeInput.value));
+  });
+}
+
+function routeMatchesMode(option) {
+  return !option.mode || !modeInput.value || option.mode === modeInput.value;
+}
+
+function setComboOpen(input, menu, isOpen) {
+  input.setAttribute("aria-expanded", String(isOpen));
+  menu.classList.toggle("open", isOpen);
+}
+
+function renderRouteMenu(showAll = false) {
+  const query = showAll ? "" : routeInput.value.trim().toLowerCase();
+  const filtered = routeOptions
+    .filter(routeMatchesMode)
+    .filter((option) => `${option.value} ${option.label || ""}`.toLowerCase().includes(query))
+    .slice(0, 120);
+  routeMenu.innerHTML = filtered.length
+    ? filtered
+        .map(
+          (option) => `
+            <button class="combo-option" type="button" data-route="${escapeHtml(option.value)}">
+              ${escapeHtml(routeLabel(option))}
+              ${option.mode ? `<span class="muted">${escapeHtml(MODE_LABELS[option.mode] || option.mode)}</span>` : ""}
+            </button>
+          `,
+        )
+        .join("")
+    : '<div class="combo-empty">No matching routes</div>';
+  setComboOpen(routeInput, routeMenu, true);
+}
+
+function renderLocationMenu() {
+  const query = locationInput.value.trim().toLowerCase();
+  const filtered = routeLocations
+    .filter((option) => `${option.label} ${option.value}`.toLowerCase().includes(query))
+    .slice(0, 160);
+  locationMenu.innerHTML = filtered.length
+    ? filtered
+        .map(
+          (option) => `
+            <button class="combo-option" type="button" data-location="${escapeHtml(option.value)}">
+              ${escapeHtml(option.label)}
+              <span class="muted">${escapeHtml(option.value)}</span>
+            </button>
+          `,
+        )
+        .join("")
+    : '<div class="combo-empty">No stops on this route match</div>';
+  setComboOpen(locationInput, locationMenu, true);
+}
+
 async function loadServiceReadiness() {
   try {
-    const [healthResponse, infoResponse, optionsResponse] = await Promise.all([
+    const [healthResponse, infoResponse, optionsResponse, routeOptionsResponse] = await Promise.all([
       fetch("/health"),
       fetch("/model-info"),
       fetch("/model-options"),
+      fetch("/route-options"),
     ]);
     const health = await healthResponse.json();
     const info = await infoResponse.json();
     const options = await optionsResponse.json();
+    const routePayload = await routeOptionsResponse.json();
 
     if (!healthResponse.ok) throw new Error(errorMessage(health.detail, "Health check failed."));
     if (!infoResponse.ok) throw new Error(errorMessage(info.detail, "Model metadata failed."));
     if (!optionsResponse.ok) throw new Error(errorMessage(options.detail, "Model options failed."));
+    if (!routeOptionsResponse.ok) throw new Error(errorMessage(routePayload.detail, "Route options failed."));
 
-    modeValues = new Set(setSelectOptions("mode", options.modes, MODE_OPTIONS));
-    directionValues = new Set(setSelectOptions("Direction", options.directions, DIRECTION_OPTIONS));
+    modeValues = new Set((options.modes || MODE_OPTIONS).map((option) => normalizeOption(option).value));
+    setDirectionOptions(options.directions || DIRECTION_OPTIONS);
     const incidentOptions =
       options.incidents && options.incidents.length
         ? options.incidents
         : CURATED_INCIDENTS.map((value) => ({ value, label: value }));
     incidentValues = new Set(setSelectOptions("Incident", incidentOptions));
-    setRouteOptions(options.routes || []);
+    routeOptions = (routePayload.routes || []).map((option) => ({
+      value: String(option.value),
+      label: String(option.label || option.value),
+      mode: option.mode || null,
+    }));
+    routeStopDataAvailable = Boolean(routePayload.gtfs_available);
 
     const artifactText = health.artifact_exists ? "Model artifact available." : "Model artifact missing.";
-    serviceNote.textContent = `${artifactText} Planner-ready category options loaded. Historical feature lookup is not implemented yet.`;
-    serviceNote.className = `service-note ${health.artifact_exists ? "ok" : "warn"}`;
-    setPreset(activePresetName());
+    const routeText = routeStopDataAvailable
+      ? "Route-stop validation loaded."
+      : `Route-stop validation unavailable: ${routePayload.warning || "GTFS data missing."}`;
+    serviceNote.textContent = `${artifactText} ${routeText} Historical feature lookup is not implemented yet.`;
+    serviceNote.className = `service-note ${health.artifact_exists && routeStopDataAvailable ? "ok" : "warn"}`;
   } catch (error) {
-    setSelectOptions("mode", MODE_OPTIONS);
     setSelectOptions("Direction", DIRECTION_OPTIONS);
     setSelectOptions(
       "Incident",
@@ -210,33 +257,86 @@ async function loadServiceReadiness() {
   }
 }
 
-function activePresetName() {
-  const active = Array.from(presetButtons).find((button) => button.classList.contains("active"));
-  return active ? active.dataset.preset : "bus";
+function resetRouteLocationState(message) {
+  routeLocations = [];
+  selectedRouteLocation = null;
+  routeLocationValidation = null;
+  locationMatch = null;
+  locationInput.value = "";
+  locationInput.disabled = true;
+  locationMenu.innerHTML = "";
+  setComboOpen(locationInput, locationMenu, false);
+  locationStatus.className = "location-status muted";
+  locationStatus.textContent = message || "Choose a route first, then choose a stop on that route.";
 }
 
-function resetLocationMatch(message) {
+function resetSelectedLocation(message) {
+  selectedRouteLocation = null;
+  routeLocationValidation = null;
   locationMatch = null;
   locationStatus.className = "location-status muted";
-  locationStatus.innerHTML = escapeHtml(message || "Location has not been matched yet.");
+  locationStatus.textContent = message || "Choose a stop from the selected route.";
 }
 
-function setPreset(name) {
-  const preset = PRESETS[name];
-  if (!preset) return;
+async function selectRoute(option) {
+  selectedRoute = option;
+  routeInput.value = option.value;
+  setComboOpen(routeInput, routeMenu, false);
+  clearValidationErrors();
+  resetRouteLocationState("Loading stops for selected route...");
+  await loadRouteLocations(option.value);
+}
 
-  for (const fieldName of FIELD_NAMES) {
-    const input = document.getElementById(fieldName);
-    if (input) {
-      input.value = preset.payload[fieldName] ?? "";
-    }
+async function loadRouteLocations(routeValue) {
+  if (!routeValue) {
+    resetRouteLocationState();
+    return;
   }
 
-  presetButtons.forEach((button) => {
-    button.classList.toggle("active", button.dataset.preset === name);
-  });
+  try {
+    const response = await fetch(`/route-locations?route=${encodeURIComponent(routeValue)}`);
+    const body = await response.json();
+    if (!response.ok) throw new Error(errorMessage(body.detail, "Route locations failed."));
+    routeStopDataAvailable = Boolean(body.gtfs_available);
+    routeLocations = body.locations || [];
+    if (body.directions && body.directions.length) {
+      setDirectionOptions(body.directions);
+    } else {
+      setDirectionOptions(DIRECTION_OPTIONS);
+    }
+    if (!routeStopDataAvailable) {
+      locationInput.disabled = true;
+      locationStatus.className = "location-status warn";
+      locationStatus.textContent = body.warning || "Route-stop validation is not available.";
+      return;
+    }
+    if (!routeLocations.length) {
+      locationInput.disabled = true;
+      locationStatus.className = "location-status warn";
+      locationStatus.textContent = body.warning || "No stops are available for the selected route.";
+      return;
+    }
+
+    locationInput.disabled = false;
+    locationStatus.className = body.warning ? "location-status suggest" : "location-status muted";
+    locationStatus.textContent = body.warning || "Choose a stop from the selected route.";
+  } catch (error) {
+    routeLocations = [];
+    locationInput.disabled = true;
+    locationStatus.className = "location-status warn";
+    locationStatus.textContent = `Could not load stops for this route: ${error.message}`;
+  }
+}
+
+function selectLocation(option) {
+  selectedRouteLocation = option;
+  routeLocationValidation = null;
+  locationMatch = null;
+  locationInput.value = option.label;
+  setComboOpen(locationInput, locationMenu, false);
+  locationStatus.className = "location-status ok";
+  locationStatus.innerHTML = `Selected route stop: <strong>${escapeHtml(option.label)}</strong>`;
   clearValidationErrors();
-  resetLocationMatch("Preset loaded. Match the location or submit to use the entered location.");
 }
 
 function clearValidationErrors() {
@@ -250,15 +350,24 @@ function setFieldError(fieldName, message) {
   if (error) error.textContent = message;
 }
 
-function validateForm() {
+function exactRouteFromInput() {
+  const value = routeInput.value.trim();
+  return routeOptions.find((option) => routeMatchesMode(option) && (option.value === value || option.label === value)) || null;
+}
+
+function exactLocationFromInput() {
+  const value = locationInput.value.trim().toLowerCase();
+  return routeLocations.find((option) => option.label.toLowerCase() === value || option.value.toLowerCase() === value);
+}
+
+async function validateBasicForm() {
   clearValidationErrors();
   const errors = {};
   const requiredFields = {
-    mode: "Choose a mode.",
-    Route: "Enter a route.",
+    Route: "Choose a route.",
     Direction: "Choose a direction.",
     Incident: "Choose an incident type.",
-    Location: "Enter a location.",
+    Location: "Choose a stop on the selected route.",
     timestamp: "Choose a timestamp.",
   };
 
@@ -267,18 +376,70 @@ function validateForm() {
     if (!value) errors[fieldName] = message;
   }
 
-  const mode = document.getElementById("mode").value;
+  if (!selectedRoute) {
+    const exactRoute = exactRouteFromInput();
+    if (exactRoute) {
+      await selectRoute(exactRoute);
+    } else if (routeInput.value.trim()) {
+      errors.Route = "Choose a route from the route list.";
+    }
+  }
+
   const direction = document.getElementById("Direction").value;
   const incident = document.getElementById("Incident").value;
-  if (mode && !modeValues.has(mode)) errors.mode = "Mode must be Bus or Streetcar.";
+  const mode = modeInput.value;
+  if (mode && !modeValues.has(mode)) errors.mode = "Mode could not be derived from the route.";
+  if (!mode) errors.mode = "Mode could not be derived from the route.";
   if (direction && !directionValues.has(direction)) errors.Direction = "Choose a listed direction.";
   if (incident && !incidentValues.has(incident)) errors.Incident = "Choose a listed incident type.";
+
+  if (!routeStopDataAvailable) {
+    errors.Location = "Route-stop validation is unavailable; configure TTC GTFS data before prediction.";
+  } else if (!selectedRouteLocation) {
+    const exactLocation = exactLocationFromInput();
+    if (exactLocation) {
+      selectLocation(exactLocation);
+    } else if (locationInput.value.trim()) {
+      errors.Location = "Choose a stop from the selected route list.";
+    }
+  }
 
   for (const [fieldName, message] of Object.entries(errors)) {
     setFieldError(fieldName, message);
   }
 
   return Object.keys(errors).length === 0;
+}
+
+async function requestRouteLocationValidation() {
+  if (!selectedRoute || !selectedRouteLocation) return null;
+  try {
+    const response = await fetch("/validate-route-location", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        route: selectedRoute.value,
+        location: selectedRouteLocation.value,
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(errorMessage(body.detail, "Route-location validation failed."));
+    routeLocationValidation = body;
+    if (!body.accepted_for_prediction) {
+      setFieldError("Location", body.warning || "Selected location is not on the selected route.");
+      locationStatus.className = "location-status warn";
+      locationStatus.textContent = body.warning || "Selected location is not on the selected route.";
+      return null;
+    }
+    locationStatus.className = "location-status ok";
+    locationStatus.innerHTML = `Validated route stop: <strong>${escapeHtml(body.route_location_label || body.route_location)}</strong>`;
+    return body;
+  } catch (error) {
+    setFieldError("Location", error.message);
+    locationStatus.className = "location-status warn";
+    locationStatus.textContent = error.message;
+    return null;
+  }
 }
 
 function buildPayload() {
@@ -292,6 +453,9 @@ function buildPayload() {
     payload[fieldName] = NUMERIC_FIELDS.has(fieldName) ? Number(value) : value;
   }
 
+  if (routeLocationValidation && routeLocationValidation.route_location) {
+    payload.Location = routeLocationValidation.route_location;
+  }
   if (locationMatch && locationMatch.accepted_for_prediction && locationMatch.matched_location) {
     payload.Location = locationMatch.matched_location;
   }
@@ -299,14 +463,8 @@ function buildPayload() {
 }
 
 async function requestLocationMatch() {
-  const location = locationInput.value.trim();
-  if (!location) {
-    resetLocationMatch("Enter a location before matching.");
-    return null;
-  }
-
-  locationStatus.className = "location-status muted";
-  locationStatus.textContent = "Matching location...";
+  const location = routeLocationValidation?.route_location || selectedRouteLocation?.value || locationInput.value.trim();
+  if (!location) return null;
 
   try {
     const response = await fetch("/match-location", {
@@ -316,52 +474,19 @@ async function requestLocationMatch() {
     });
     const body = await response.json();
     if (!response.ok) throw new Error(errorMessage(body.detail, "Location matching failed."));
-    renderLocationMatch(body);
+    locationMatch = body;
     return body;
   } catch (error) {
     locationMatch = null;
-    locationStatus.className = "location-status warn";
-    locationStatus.textContent = `Location matching unavailable: ${error.message}. Using entered location.`;
+    locationStatus.className = "location-status suggest";
+    locationStatus.textContent = `Route stop validated. Model location matching unavailable: ${error.message}`;
     return null;
   }
 }
 
-function renderLocationMatch(match) {
-  locationMatch = match;
-  if (match.accepted_for_prediction && match.matched_location) {
-    locationStatus.className = "location-status ok";
-    locationStatus.innerHTML = `Matched to: <strong>${escapeHtml(match.matched_location)}</strong>`;
-    return;
-  }
-
-  if (match.matched_location && match.match_type === "fuzzy") {
-    locationStatus.className = "location-status suggest";
-    locationStatus.innerHTML = `
-      Suggested: <strong>${escapeHtml(match.matched_location)}</strong>
-      <button id="accept-location-button" class="inline-button" type="button">Use suggestion</button>
-    `;
-    document.querySelector("#accept-location-button").addEventListener("click", () => {
-      locationInput.value = match.matched_location;
-      locationMatch = { ...match, accepted_for_prediction: true };
-      locationStatus.className = "location-status ok";
-      locationStatus.innerHTML = `Matched to: <strong>${escapeHtml(match.matched_location)}</strong>`;
-    });
-    return;
-  }
-
-  locationStatus.className = "location-status warn";
-  locationStatus.textContent = match.warning || "No confident match; using entered location.";
-}
-
-async function ensureLocationMatch() {
-  if (
-    locationMatch &&
-    locationMatch.original_location === locationInput.value.trim() &&
-    (locationMatch.accepted_for_prediction || locationMatch.match_type === "none")
-  ) {
-    return locationMatch;
-  }
-  return requestLocationMatch();
+async function ensureRouteLocationForPrediction() {
+  if (routeLocationValidation?.accepted_for_prediction) return routeLocationValidation;
+  return requestRouteLocationValidation();
 }
 
 function resultCard(label, value, extraClass = "") {
@@ -432,7 +557,7 @@ function renderError(message) {
 
 async function submitPrediction(event) {
   event.preventDefault();
-  if (!validateForm()) {
+  if (!(await validateBasicForm())) {
     resultsEl.className = "results-empty";
     resultsEl.textContent = "Fix the highlighted fields before estimating delay.";
     return;
@@ -441,10 +566,17 @@ async function submitPrediction(event) {
   submitButton.disabled = true;
   submitButton.textContent = "Estimating...";
   resultsEl.className = "results-empty";
-  resultsEl.textContent = "Submitting incident details...";
+  resultsEl.textContent = "Validating route and location...";
 
   try {
-    await ensureLocationMatch();
+    const routeValidation = await ensureRouteLocationForPrediction();
+    if (!routeValidation?.accepted_for_prediction) {
+      resultsEl.className = "results-empty";
+      resultsEl.textContent = "Choose a location from the selected route before estimating delay.";
+      return;
+    }
+
+    await requestLocationMatch();
     const response = await fetch("/predict-delay", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -465,19 +597,63 @@ async function submitPrediction(event) {
   }
 }
 
-presetButtons.forEach((button) => {
-  button.addEventListener("click", () => setPreset(button.dataset.preset));
+routeInput.addEventListener("focus", () => {
+  routeInput.select();
+  renderRouteMenu(true);
+});
+routeInput.addEventListener("input", () => {
+  selectedRoute = null;
+  resetRouteLocationState("Choose a route from the route list.");
+  setDirectionOptions(DIRECTION_OPTIONS);
+  renderRouteMenu();
+});
+routeInput.addEventListener("blur", () => {
+  window.setTimeout(() => setComboOpen(routeInput, routeMenu, false), 120);
+});
+routeMenu.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-route]");
+  if (!button) return;
+  const option = routeOptions.find((candidate) => candidate.value === button.dataset.route);
+  if (option) void selectRoute(option);
 });
 
-matchLocationButton.addEventListener("click", requestLocationMatch);
-locationInput.addEventListener("input", () => resetLocationMatch("Location changed. Match again or submit to use it as entered."));
+locationInput.addEventListener("focus", () => {
+  if (!locationInput.disabled) renderLocationMenu();
+});
+locationInput.addEventListener("input", () => {
+  resetSelectedLocation("Choose a stop from the selected route list.");
+  renderLocationMenu();
+});
+locationInput.addEventListener("blur", () => {
+  window.setTimeout(() => setComboOpen(locationInput, locationMenu, false), 120);
+});
+locationMenu.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-location]");
+  if (!button) return;
+  const option = routeLocations.find((candidate) => candidate.value === button.dataset.location);
+  if (option) selectLocation(option);
+});
+
+modeButtons.forEach((button) => {
+  button.setAttribute("aria-pressed", String(button.classList.contains("active")));
+  button.addEventListener("click", () => {
+    if (button.dataset.mode === modeInput.value) return;
+    setMode(button.dataset.mode);
+    selectedRoute = null;
+    routeInput.value = "";
+    resetRouteLocationState("Choose a route from the route list.");
+    setDirectionOptions(DIRECTION_OPTIONS);
+    renderRouteMenu(true);
+  });
+});
+
 form.addEventListener("submit", submitPrediction);
 
-setSelectOptions("mode", MODE_OPTIONS);
-setSelectOptions("Direction", DIRECTION_OPTIONS);
+setDirectionOptions(DIRECTION_OPTIONS);
 setSelectOptions(
   "Incident",
   CURATED_INCIDENTS.map((value) => ({ value, label: value })),
 );
-setPreset("bus");
-loadServiceReadiness();
+setMode("bus");
+resetRouteLocationState();
+void loadServiceReadiness();

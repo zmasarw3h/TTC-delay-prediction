@@ -50,23 +50,28 @@ Static assets:
 /static/app.js
 ```
 
-The demo loads `/health`, `/model-info`, and `/model-options` on page load, then submits engineered incident-time payloads to `/predict-delay`. It displays planner-friendly cards for expected delay minutes, calibrated `30+` and `60+` minute probabilities, risk bands, binary severe-delay flags, and input notes. Selected probability cutoffs are kept under a collapsed model-details section.
+The demo loads `/health`, `/model-info`, `/model-options`, and `/route-options` on page load, then submits engineered incident-time payloads to `/predict-delay`. It displays planner-friendly cards for expected delay minutes, calibrated `30+` and `60+` minute probabilities, risk bands, binary severe-delay flags, and input notes. Selected probability cutoffs are kept under a collapsed model-details section.
 
-Mode, direction, and incident controls use controlled normalized options rather than raw artifact categories. Route is a free-text field with optional route-like suggestions only. Location is always a plain text field with no datalist because reported incident locations are high-cardinality.
+Mode is selected with Bus and Streetcar buttons. Incident controls use controlled normalized options rather than raw artifact categories. Route is a dependency-free searchable picker filtered by the selected mode. After route selection, the Direction dropdown is limited to GTFS-derived directions for that route, using the normalized `N`, `E`, `S`, `W`, and `B` model contract. The selected mode is submitted as the same `bus` / `streetcar` model feature as before.
 
-Location remains free text because reported incident locations are messy. The UI can call `/match-location` to compare the entered location against known model locations:
+Location is route-scoped in the main UI. The user must choose a location from stops served by the selected route, using local TTC GTFS route-stop data. The frontend calls `/validate-route-location` before prediction and blocks submission when the selected location is not a stop on the selected route. This prevents invalid combinations such as route `29` with a Yonge/Dundas location.
+
+GTFS is used only for route-stop validity and route-derived mode. The model still receives normalized text in the existing `Location` field, not GTFS `stop_id`. After route-stop validation, the UI can call `/match-location` to compare the selected stop name against known model locations:
 
 - exact normalized matches are accepted automatically
 - fuzzy matches with score `>= 90` are accepted automatically
 - fuzzy matches with score from `75` to `< 90` are shown as suggestions that the user can accept
-- lower-confidence matches are not accepted, but the user can still submit the original location with a warning
-
-The UI includes exactly two presets:
-
-- Bus incident: a bus example with valid normalized category values, reasonable prior-delay feature values, and a timestamp so calendar fields are derived by the API.
-- Streetcar incident: a streetcar example with valid normalized category values, reasonable prior-delay feature values, and a timestamp so calendar fields are derived by the API.
+- lower-confidence model-location matches are not accepted, so the route-validated normalized stop text is submitted instead
 
 This is a local demo UI only. It still expects engineered incident-time features; raw TTC incident-to-feature lookup and weather enrichment are not implemented.
+
+Route-stop validation requires a local TTC GTFS zip file. Set `TTC_GTFS_ZIP_PATH` or place the zip at:
+
+```text
+data/raw/ttc_gtfs.zip
+```
+
+The TTC routes and schedules GTFS package is available from the City of Toronto Open Data portal: <https://open.toronto.ca/dataset/ttc-routes-and-schedules/>.
 
 ## Endpoints
 
@@ -145,9 +150,93 @@ Other
 Unknown
 ```
 
+### `GET /route-options`
+
+Returns route picker options. When GTFS route-stop data is configured, routes come from `routes.txt` and include derived mode:
+
+```json
+{
+  "routes": [
+    {"value": "29", "label": "29 - Dufferin", "mode": "bus"},
+    {"value": "501", "label": "501 - Queen", "mode": "streetcar"}
+  ],
+  "gtfs_available": true,
+  "source_path": "data/raw/ttc_gtfs.zip",
+  "warning": null
+}
+```
+
+When GTFS is not configured, the endpoint falls back to route-like model artifact categories for display, but route-stop validation remains unavailable and the frontend blocks prediction.
+
+### `GET /route-locations`
+
+Returns stop/location options scoped to a selected route:
+
+```text
+/route-locations?route=29
+```
+
+Response:
+
+```json
+{
+  "route": "29",
+  "normalized_route": "29",
+  "mode": "bus",
+  "directions": [
+    {"value": "N", "label": "North"},
+    {"value": "S", "label": "South"},
+    {"value": "B", "label": "Both / bidirectional"}
+  ],
+  "locations": [
+    {
+      "value": "DUFFERIN STATION",
+      "label": "Dufferin Station",
+      "normalized_location": "DUFFERIN STATION"
+    }
+  ],
+  "count": 1,
+  "gtfs_available": true,
+  "source_path": "data/raw/ttc_gtfs.zip",
+  "warning": null
+}
+```
+
+Branch routes such as `29A` may fall back to the base route stop list, for example route `29`, with a warning.
+
+### `POST /validate-route-location`
+
+Validates that a location belongs to the selected route before prediction.
+
+Request:
+
+```json
+{
+  "route": "29",
+  "location": "Dufferin Station"
+}
+```
+
+Accepted response:
+
+```json
+{
+  "route": "29",
+  "normalized_route": "29",
+  "original_location": "Dufferin Station",
+  "normalized_location": "DUFFERIN STATION",
+  "route_location": "DUFFERIN STATION",
+  "route_location_label": "Dufferin Station",
+  "accepted_for_prediction": true,
+  "warning": null
+}
+```
+
+Rejected route/location combinations return `accepted_for_prediction: false` with a warning. They are not submitted by the frontend.
+
 ### `POST /match-location`
 
-Matches a free-form location string to known model locations without changing `/predict-delay` behavior.
+Matches route-validated normalized stop/location text to known model locations without changing `/predict-delay` behavior.
 
 Request:
 
@@ -171,7 +260,7 @@ Response:
 }
 ```
 
-The frontend decides whether to submit the matched location or the original entered location. The prediction endpoint itself does not force matching.
+The frontend submits the matched model location when high-confidence matching succeeds. Otherwise it submits the route-validated normalized stop text. The prediction endpoint itself does not force matching.
 
 Invalid or malformed requests return standard FastAPI `422` JSON responses. Normal no-match cases return a successful JSON response with `match_type` set to `none`, `accepted_for_prediction` set to `false`, and a readable warning instead of raising a server error.
 

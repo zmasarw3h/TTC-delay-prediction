@@ -285,12 +285,19 @@ Open the local demo UI:
 http://127.0.0.1:8000/
 ```
 
-The demo includes exactly two presets:
+The repaired local demo UI uses Bus and Streetcar mode buttons, clean normalized category controls, a searchable route picker filtered by mode, route-scoped direction and stop selection, and optional location matching assistance after the route-stop pair has been validated. Route/location combinations that are not present in local TTC GTFS route-stop data are blocked before prediction. The app still expects engineered prior-delay features and does not implement raw TTC incident-to-feature lookup.
 
-- Bus incident
-- Streetcar incident
+Route-stop validation requires a local TTC routes and schedules GTFS zip. Set `TTC_GTFS_ZIP_PATH` or place the zip here:
 
-The repaired local demo UI uses clean normalized category controls: mode and direction dropdowns, a curated incident dropdown, route-like route suggestions, and plain-text location entry with optional location matching assistance. A high-confidence location match can be submitted automatically; medium-confidence matches are shown as suggestions. The app still expects engineered prior-delay features and does not implement raw TTC incident-to-feature lookup.
+```text
+data/raw/ttc_gtfs.zip
+```
+
+The TTC GTFS package is available from the City of Toronto Open Data portal:
+
+```text
+https://open.toronto.ca/dataset/ttc-routes-and-schedules/
+```
 
 By default, the API loads:
 
@@ -310,6 +317,9 @@ Endpoints:
 - `GET /health`
 - `GET /model-info`
 - `GET /model-options`
+- `GET /route-options`
+- `GET /route-locations`
+- `POST /validate-route-location`
 - `POST /match-location`
 - `POST /predict-delay`
 - `GET /`

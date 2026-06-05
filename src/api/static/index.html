@@ -29,26 +29,31 @@
             </div>
           </div>
 
-          <div class="preset-row" aria-label="Demo presets">
-            <button type="button" class="preset-button active" data-preset="bus">Bus incident</button>
-            <button type="button" class="preset-button" data-preset="streetcar">Streetcar incident</button>
+          <input id="mode" name="mode" type="hidden" value="bus" />
+
+          <div class="mode-toggle" aria-label="Mode">
+            <span>Mode</span>
+            <div class="mode-buttons">
+              <button type="button" class="mode-button active" data-mode="bus">Bus</button>
+              <button type="button" class="mode-button" data-mode="streetcar">Streetcar</button>
+            </div>
+            <div class="field-error" data-error-for="mode"></div>
           </div>
 
           <div class="form-grid">
-            <label>
-              <span>Mode</span>
-              <select id="mode" name="mode" required>
-                <option value="bus">Bus</option>
-                <option value="streetcar">Streetcar</option>
-              </select>
-              <div class="field-error" data-error-for="mode"></div>
-            </label>
-            <label>
+            <div class="combo-field">
               <span>Route</span>
-              <input id="Route" name="Route" list="route-options" autocomplete="off" required />
-              <datalist id="route-options"></datalist>
+              <input
+                id="Route"
+                name="Route"
+                autocomplete="off"
+                aria-controls="route-menu"
+                aria-expanded="false"
+                required
+              />
+              <div id="route-menu" class="combo-menu" role="listbox"></div>
               <div class="field-error" data-error-for="Route"></div>
-            </label>
+            </div>
             <label>
               <span>Direction</span>
               <select id="Direction" name="Direction" required>
@@ -67,14 +72,21 @@
               <div class="field-error" data-error-for="Incident"></div>
             </label>
             <div class="wide location-control">
-              <label>
+              <div class="combo-field">
                 <span>Location</span>
-                <input id="Location" name="Location" autocomplete="off" required />
+                <input
+                  id="Location"
+                  name="Location"
+                  autocomplete="off"
+                  aria-controls="location-menu"
+                  aria-expanded="false"
+                  required
+                />
+                <div id="location-menu" class="combo-menu" role="listbox"></div>
                 <div class="field-error" data-error-for="Location"></div>
-              </label>
-              <button id="match-location-button" class="secondary-button" type="button">Match location</button>
+              </div>
               <div id="location-status" class="location-status muted" aria-live="polite">
-                Enter a reported location, then match it to a known model location when possible.
+                Choose a route first, then choose a stop on that route.
               </div>
             </div>
             <label>
