@@ -41,6 +41,7 @@ reports/risk_models/*
 !reports/category_audit/
 reports/category_audit/*
 !reports/category_audit/.gitkeep
+reports/category_audit_normalized/
 !reports/calibration/
 reports/calibration/*
 !reports/calibration/.gitkeep
