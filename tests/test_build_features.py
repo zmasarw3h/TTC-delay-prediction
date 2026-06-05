@@ -84,6 +84,28 @@ def test_historical_features_do_not_use_current_row():
     assert second_route_hour["prior_global_mean_delay"] == 15
 
 
+def test_build_feature_frame_applies_categorical_normalization_before_history():
+    frame = _sample_frame()
+    frame.loc[0, "Route"] = 1.0
+    frame.loc[1, "Route"] = "1"
+    frame.loc[0, "Direction"] = "north"
+    frame.loc[1, "Direction"] = "N/B"
+    frame.loc[0, "Incident"] = "Delay"
+    frame.loc[1, "Incident"] = "General Delay"
+    frame.loc[0, "Location"] = "Kennedy Stn"
+
+    featured = build_feature_frame(frame, max_delay_minutes=240)
+    second_route = featured[featured["ts"] == pd.Timestamp("2023-01-01 08:00:00")].iloc[0]
+
+    assert featured.loc[0, "Route"] == "1"
+    assert featured.loc[0, "Direction"] == "N"
+    assert featured.loc[0, "Incident"] == "General Delay"
+    assert featured.loc[0, "Location"] == "KENNEDY STATION"
+    assert featured.loc[0, "Route_raw"] == 1.0
+    assert second_route["prior_route_mean_delay"] == 10
+    assert second_route["prior_incident_mean_delay"] == 10
+
+
 def test_historical_features_do_not_use_same_timestamp_rows():
     frame = pd.DataFrame(
         {
@@ -157,4 +179,7 @@ def test_create_feature_metadata_contains_expected_contract():
         "validation": 2,
         "test": 1,
     }
+    assert metadata["categorical_normalization"]["applied"] is True
+    assert "Direction" in metadata["categorical_normalization"]["normalized_columns"]
+    assert "Direction_raw" in metadata["categorical_normalization"]["raw_columns_preserved"]
     assert "prior_route_hour_7d_mean_delay" in metadata["historical_feature_definitions"]

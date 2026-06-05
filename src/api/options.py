@@ -8,6 +8,16 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from src.data.audit_categories import audit_value, is_route_like
+from src.data.categorical_normalization import (
+    INCIDENT_CATEGORIES,
+    OTHER_CATEGORY,
+    UNKNOWN_CATEGORY,
+    normalize_direction,
+    normalize_incident,
+    normalize_location,
+    normalize_mode,
+    normalize_route,
+)
 
 try:  # pragma: no cover - exercised when optional dependency is installed.
     from rapidfuzz import fuzz, process
@@ -18,21 +28,11 @@ except ImportError:  # pragma: no cover - fallback is covered in tests.
 
 OPTION_FIELDS = ("mode", "Route", "Direction", "Incident", "Location")
 DEFAULT_MODES = ["bus", "streetcar"]
-DEFAULT_DIRECTIONS = ["N", "E", "S", "W"]
+DEFAULT_DIRECTIONS = ["N", "E", "S", "W", "B"]
 CURATED_INCIDENTS = [
-    "Mechanical",
-    "General Delay",
-    "Operations",
-    "Operations - Operator",
-    "Late Leaving Garage",
-    "Utilized Off Route",
-    "Diversion",
-    "Investigation",
-    "Emergency Services",
-    "Security",
-    "Collision",
-    "Cleaning",
-    "Held By",
+    category
+    for category in INCIDENT_CATEGORIES
+    if category not in {UNKNOWN_CATEGORY, OTHER_CATEGORY}
 ]
 HIGH_CONFIDENCE_LOCATION_SCORE = 90.0
 MEDIUM_CONFIDENCE_LOCATION_SCORE = 75.0
@@ -69,14 +69,21 @@ def model_options_from_categories(
     categories = known_categories or {}
     warnings: list[str] = []
 
-    modes = DEFAULT_MODES
+    modes = sorted(
+        {
+            normalize_mode(value)
+            for value in _category_values(categories, "mode")
+            if normalize_mode(value) != UNKNOWN_CATEGORY
+        }
+        or set(DEFAULT_MODES)
+    )
     directions = DEFAULT_DIRECTIONS
     raw_directions = _category_values(categories, "Direction")
     raw_routes = _category_values(categories, "Route")
     routes, route_warnings = _filtered_route_options(raw_routes)
     raw_incidents = _category_values(categories, "Incident")
     incidents = CURATED_INCIDENTS.copy()
-    locations = _category_values(categories, "Location")
+    locations = _normalized_location_options(_category_values(categories, "Location"))
     warnings.extend(route_warnings)
     warnings.extend(_ignored_direction_warnings(raw_directions))
     warnings.extend(_ignored_incident_warnings(raw_incidents))
@@ -187,8 +194,9 @@ def match_location(
 
 def normalize_match_text(value: str) -> str:
     """Normalize free text for category and location matching."""
-    text = str(value or "").lower().strip()
-    text = re.sub(r"[&@/]", " and ", text)
+    text = normalize_location(value).lower()
+    if text.lower() == UNKNOWN_CATEGORY.lower():
+        return ""
     punctuation = string.punctuation.replace("&", "").replace("@", "").replace("/", "")
     text = text.translate(str.maketrans({char: " " for char in punctuation}))
     tokens = [ROAD_WORDS.get(token, token) for token in text.split()]
@@ -203,7 +211,7 @@ def _category_values(categories: Mapping[str, list[str]], field_name: str) -> li
 
 def _filtered_route_options(values: list[str]) -> tuple[list[str], list[str]]:
     routes = sorted(
-        {value.upper() for value in values if is_route_like(value)},
+        {normalize_route(value) for value in values if is_route_like(value)},
         key=_option_sort_key,
     )
     dropped_count = len({value for value in values if value}) - len(routes)
@@ -213,7 +221,11 @@ def _filtered_route_options(values: list[str]) -> tuple[list[str], list[str]]:
 
 
 def _ignored_direction_warnings(values: list[str]) -> list[str]:
-    ignored = [value for value in values if value.upper() not in set(DEFAULT_DIRECTIONS)]
+    ignored = [
+        value
+        for value in values
+        if normalize_direction(value) not in set(DEFAULT_DIRECTIONS)
+    ]
     if not ignored:
         return []
     suspicious = [
@@ -236,7 +248,8 @@ def _ignored_incident_warnings(values: list[str]) -> list[str]:
     suspicious = [
         value
         for value in values
-        if audit_value("Incident", value, 1, 0.0).suspicious
+        if normalize_incident(value) == OTHER_CATEGORY
+        and audit_value("Incident", value, 1, 0.0).suspicious
     ]
     if not suspicious:
         return []
@@ -244,6 +257,17 @@ def _ignored_incident_warnings(values: list[str]) -> list[str]:
         "Ignored "
         f"{len(suspicious)} suspicious raw Incident category value(s) in favor of the curated list."
     ]
+
+
+def _normalized_location_options(values: list[str]) -> list[str]:
+    return sorted(
+        {
+            normalize_location(value)
+            for value in values
+            if normalize_location(value) != UNKNOWN_CATEGORY
+        },
+        key=_option_sort_key,
+    )
 
 
 def _option_sort_key(value: str) -> tuple[int, Any]:

@@ -21,11 +21,13 @@ When `timestamp` is provided, the API derives the model's time fields and Ontari
 Categorical model fields are normalized before scoring:
 
 - Leading and trailing whitespace is stripped.
-- Empty strings, `nan`, `None`, and `null` are treated as missing.
+- Empty strings, `nan`, `None`, `null`, `n/a`, and similar null-like strings are treated as missing.
 - Missing categorical fields become `Unknown`.
-- Route values are kept as string categories, so values such as `29`, `501`, and `RAD` remain valid categories.
-- Direction values are normalized to uppercase. Common TTC direction codes such as `N`, `S`, `E`, `W`, and `B` are accepted. Unusual direction values are not rejected, but they return warnings.
-- Mode is validated case-insensitively and must be `bus` or `streetcar`.
+- Route values are normalized through the same deterministic rule used in training. Values such as `29`, `29.0`, `501`, `32A`, `504B`, and `RAD` remain valid string categories. Obvious non-route text becomes `Unknown`.
+- Direction values are normalized to `N`, `E`, `S`, `W`, `B`, or `Unknown`. Variants such as `N/B`, `north`, and `EB` use the normalized code; unsupported direction text becomes `Unknown` with a warning.
+- Incident values are mapped to the curated operational categories documented in `docs/categorical_normalization.md`. Unrecognized non-missing labels become `Other`.
+- Location values are normalized with safe uppercase text cleanup, separator normalization, and common abbreviation expansion. API location matching may compare normalized text to known normalized locations, but prediction input normalization does not fuzzy-snap or geocode locations.
+- Mode is validated case-insensitively and must be `bus` or `streetcar` for API prediction requests.
 
 The model preprocessing pipeline should use encoder unknown handling, so unseen categorical values can pass through validation. Those cases may still produce warnings because they are outside the categories observed or expected by the caller.
 

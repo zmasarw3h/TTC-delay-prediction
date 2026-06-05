@@ -10,6 +10,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.data.categorical_normalization import (
+    NORMALIZED_CATEGORICAL_COLUMNS,
+    RAW_CATEGORICAL_COLUMNS,
+    normalize_categorical_columns,
+)
+
 
 DEFAULT_INPUT = Path("data/processed/ttc_delays_cleaned.csv")
 DEFAULT_OUTPUT_DIR = Path("data/processed/modeling")
@@ -183,7 +189,8 @@ def add_targets(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_feature_frame(df: pd.DataFrame, max_delay_minutes: int) -> pd.DataFrame:
-    modeling = create_modeling_dataset(df, max_delay_minutes=max_delay_minutes)
+    normalized = normalize_categorical_columns(df)
+    modeling = create_modeling_dataset(normalized, max_delay_minutes=max_delay_minutes)
     modeled = add_time_features(modeling)
     modeled = add_historical_features(modeled)
     return add_targets(modeled)
@@ -248,6 +255,22 @@ def create_feature_metadata(
         "modeling_dataset_rows": int(len(modeling_df)),
         "modeling_dataset_date_range": _date_range(modeling_df),
         "categorical_columns": MAIN_CATEGORICAL_FEATURES,
+        "categorical_normalization": {
+            "applied": True,
+            "normalized_columns": NORMALIZED_CATEGORICAL_COLUMNS,
+            "raw_columns_preserved": [
+                f"{column}_raw"
+                for column in RAW_CATEGORICAL_COLUMNS
+                if f"{column}_raw" in modeling_df.columns
+            ],
+            "rules_summary": {
+                "mode": "Case-insensitive bus/streetcar normalization; unsupported or missing values become Unknown during feature builds.",
+                "Route": "Whitespace stripped, integer-like values converted to route strings, route variants preserved, obvious non-route text set to Unknown.",
+                "Direction": "Strictly normalized to N, E, S, W, B, or Unknown.",
+                "Incident": "Variants mapped to curated operational categories; unrecognized non-missing labels become Other.",
+                "Location": "Safe deterministic uppercase text cleanup, separator normalization, and common road/station abbreviation expansion only.",
+            },
+        },
         "numeric_columns": NUMERIC_FEATURES,
         "historical_feature_definitions": {
             "prior_route_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same Route.",

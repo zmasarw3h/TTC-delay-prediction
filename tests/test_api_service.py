@@ -181,11 +181,11 @@ def test_model_options_returns_expected_structure(client):
     body = response.json()
     assert body["modes"] == ["bus", "streetcar"]
     assert body["routes"] == ["29", "501", "32A", "RAD"]
-    assert body["directions"] == ["N", "E", "S", "W"]
+    assert body["directions"] == ["N", "E", "S", "W", "B"]
     assert "Mechanical" in body["incidents"]
     assert "Operations" in body["incidents"]
     assert "501" not in body["incidents"]
-    assert "Dufferin Station" in body["locations"]
+    assert "DUFFERIN STATION" in body["locations"]
     assert body["counts"]["locations"] == 2
     assert "Mechanical delay at station" not in body["directions"]
     assert any("Excluded 1 non-route-like Route" in warning for warning in body["warnings"])
@@ -196,7 +196,7 @@ def test_model_options_directions_are_fixed_even_with_polluted_artifact(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["directions"] == ["N", "E", "S", "W"]
+    assert body["directions"] == ["N", "E", "S", "W", "B"]
     assert "Mechanical delay at station" not in body["directions"]
 
 
@@ -206,7 +206,7 @@ def test_match_location_handles_exact_match(client):
     assert response.status_code == 200
     body = response.json()
     assert body["original_location"] == "dufferin station"
-    assert body["matched_location"] == "Dufferin Station"
+    assert body["matched_location"] == "DUFFERIN STATION"
     assert body["score"] == 100.0
     assert body["match_type"] == "exact"
     assert body["accepted_for_prediction"] is True
@@ -218,7 +218,7 @@ def test_match_location_handles_fuzzy_or_contains_match(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["matched_location"] == "Queen Street West and Spadina Avenue"
+    assert body["matched_location"] == "QUEEN STREET WEST AND SPADINA AVENUE"
     assert body["score"] >= 75.0
     assert body["match_type"] == "fuzzy"
     if body["score"] >= 90.0:
@@ -254,6 +254,24 @@ def test_predict_delay_returns_expected_response_shape(client):
     assert body["selected_probability_cutoff_60"] == 0.3
     assert body["model_name"] == "fake_calibrated_two_output_model"
     assert body["model_phase"] == "Phase 9 test"
+
+
+def test_predict_delay_uses_normalized_categorical_values(client):
+    payload = valid_payload()
+    payload["Route"] = 29.0
+    payload["Direction"] = "N/B"
+    payload["Incident"] = "Mech"
+    payload["Location"] = "Dufferin Stn"
+
+    response = client.post("/predict-delay", json=payload)
+
+    assert response.status_code == 200
+    app_module = importlib.import_module("src.api.app")
+    seen = app_module.prediction_service.artifact["expected_delay_regressor"].seen_frame
+    assert seen.loc[0, "Route"] == "29"
+    assert seen.loc[0, "Direction"] == "N"
+    assert seen.loc[0, "Incident"] == "Mechanical"
+    assert seen.loc[0, "Location"] == "DUFFERIN STATION"
 
 
 def test_leakage_fields_are_rejected(client):
@@ -423,8 +441,8 @@ def test_unknown_categorical_values_warn_without_crashing(client):
     assert response.status_code == 200
     warning_text = " ".join(response.json()["warnings"])
     assert "Route '999'" in warning_text
-    assert "Incident 'Unlisted'" in warning_text
-    assert "Location 'Unknown stop'" in warning_text
+    assert "Incident 'Other'" in warning_text
+    assert "Location 'UNKNOWN STOP'" in warning_text
 
 
 def test_app_import_is_safe(monkeypatch):

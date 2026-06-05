@@ -5,23 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
+from src.data.categorical_normalization import (
+    OTHER_CATEGORY,
+    UNKNOWN_CATEGORY,
+    normalize_direction as normalize_model_direction,
+    normalize_incident,
+    normalize_location,
+    normalize_mode as normalize_model_mode,
+    normalize_route as normalize_model_route,
+)
 from src.features.build_features import MAIN_CATEGORICAL_FEATURES, NUMERIC_FEATURES
 
 
-UNKNOWN_CATEGORY = "Unknown"
 MISSING_STRINGS = {"", "nan", "none", "null"}
 SUPPORTED_MODES = {"bus", "streetcar"}
-COMMON_DIRECTIONS = {
-    "N",
-    "S",
-    "E",
-    "W",
-    "B",
-    "N/B",
-    "S/B",
-    "E/B",
-    "W/B",
-}
 LEAKAGE_FIELDS = {
     "Min Delay",
     "Min Gap",
@@ -61,58 +58,26 @@ def normalize_categorical_string(
 
 def normalize_route(value: Any) -> str:
     """Normalize TTC route values as string categories."""
-    if _is_missing(value):
-        return UNKNOWN_CATEGORY
-    if isinstance(value, bool):
-        raise ValueError("Route must be a route string or integer-like number.")
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        if value.is_integer():
-            return str(int(value))
-        raise ValueError("Route numeric values must be integer-like.")
-
-    normalized = normalize_categorical_string(value)
-    if normalized is None:
-        return UNKNOWN_CATEGORY
-    return normalized
+    return normalize_model_route(value)
 
 
 def normalize_direction(value: Any) -> tuple[str, list[str]]:
-    """Normalize direction while allowing unusual direction codes with a warning."""
-    normalized = normalize_categorical_string(value)
-    if normalized is None:
-        normalized = UNKNOWN_CATEGORY
-
+    """Normalize direction to the training contract with non-fatal warnings."""
+    normalized = normalize_model_direction(value)
     warnings: list[str] = []
     if normalized == UNKNOWN_CATEGORY:
-        warnings.append("Direction is missing and was set to Unknown.")
-        return normalized, warnings
-
-    normalized = normalized.upper()
-    if normalized not in COMMON_DIRECTIONS:
-        warnings.append(f"Direction '{normalized}' is not a common TTC direction code.")
+        warnings.append("Direction is missing or unsupported and was set to Unknown.")
     return normalized, warnings
 
 
 def normalize_mode(value: Any) -> str:
     """Normalize and validate transit mode."""
-    normalized = normalize_categorical_string(value, missing_value=None)
-    if normalized is None:
-        raise ValueError("mode is required and must be one of: bus, streetcar.")
-
-    mode = normalized.lower()
-    if mode not in SUPPORTED_MODES:
-        raise ValueError("Unsupported mode. Expected one of: bus, streetcar.")
-    return mode
+    return normalize_model_mode(value, strict=True)
 
 
 def normalize_incident_or_location(value: Any) -> str:
     """Normalize incident and location text for model categorical features."""
-    normalized = normalize_categorical_string(value)
-    if normalized is None:
-        return UNKNOWN_CATEGORY
-    return normalized
+    return normalize_incident(value)
 
 
 def _normalize_numeric(value: Any) -> Any:
@@ -131,10 +96,30 @@ def _warn_if_unknown_category(
     if value == UNKNOWN_CATEGORY:
         return None
 
-    allowed = {str(category) for category in known_categories[field_name]}
+    allowed = {
+        _normalize_known_category(field_name, category)
+        for category in known_categories[field_name]
+    }
+    allowed.discard(UNKNOWN_CATEGORY)
+    if field_name == "Incident":
+        allowed.discard(OTHER_CATEGORY)
     if str(value) not in allowed:
         return f"{field_name} '{value}' was not seen in the known category list."
     return None
+
+
+def _normalize_known_category(field_name: str, value: Any) -> str:
+    if field_name == "mode":
+        return normalize_model_mode(value)
+    if field_name == "Route":
+        return normalize_model_route(value)
+    if field_name == "Direction":
+        return normalize_model_direction(value)
+    if field_name == "Incident":
+        return normalize_incident(value)
+    if field_name == "Location":
+        return normalize_location(value)
+    return str(value)
 
 
 def validate_model_features(
@@ -172,10 +157,14 @@ def validate_model_features(
         elif column == "Direction":
             normalized, direction_warnings = normalize_direction(value)
             warnings.extend(direction_warnings)
-        elif column in {"Incident", "Location"}:
-            normalized = normalize_incident_or_location(value)
+        elif column == "Incident":
+            normalized = normalize_incident(value)
             if normalized == UNKNOWN_CATEGORY:
-                warnings.append(f"{column} is missing and was set to Unknown.")
+                warnings.append("Incident is missing and was set to Unknown.")
+        elif column == "Location":
+            normalized = normalize_location(value)
+            if normalized == UNKNOWN_CATEGORY:
+                warnings.append("Location is missing and was set to Unknown.")
         elif column in categorical_set:
             normalized = normalize_categorical_string(value)
             if normalized == UNKNOWN_CATEGORY:

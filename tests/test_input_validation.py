@@ -2,6 +2,7 @@ import pytest
 
 from src.api.input_validation import (
     UNKNOWN_CATEGORY,
+    normalize_direction,
     normalize_mode,
     normalize_route,
     validate_model_features,
@@ -46,6 +47,13 @@ def test_missing_direction_becomes_unknown():
     assert result.features["Direction"] == UNKNOWN_CATEGORY
 
 
+def test_direction_variants_use_training_normalization():
+    normalized, warnings = normalize_direction("N/B")
+
+    assert normalized == "N"
+    assert warnings == []
+
+
 def test_mode_normalization_accepts_bus_and_streetcar():
     assert normalize_mode("Bus") == "bus"
     assert normalize_mode("streetcar") == "streetcar"
@@ -86,7 +94,8 @@ def test_unknown_categorical_values_warn_without_rejection():
         known_categories={"Incident": {"Delay", "Mechanical"}},
     )
 
-    assert result.features["Direction"] == "Q"
-    assert result.features["Incident"] == "Unlisted"
-    assert any("Direction 'Q'" in warning for warning in result.warnings)
-    assert any("Incident 'Unlisted'" in warning for warning in result.warnings)
+    assert result.features["Direction"] == UNKNOWN_CATEGORY
+    assert result.features["Incident"] == "Other"
+    assert result.features["Location"] == "QUEEN AND UNKNOWN"
+    assert any("Direction is missing or unsupported" in warning for warning in result.warnings)
+    assert any("Incident 'Other'" in warning for warning in result.warnings)

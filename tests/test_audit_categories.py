@@ -15,6 +15,13 @@ def test_direction_audit_flags_garbage_direction_values():
     assert "contains incident or location word" in result.reasons
 
 
+def test_direction_audit_treats_normalized_values_as_healthy():
+    for value in ["N", "E", "S", "W", "B", "Unknown"]:
+        result = audit_value("Direction", value, 1, 10.0)
+
+        assert result.suspicious is False
+
+
 def test_route_audit_flags_long_text_route_values():
     result = audit_value("Route", "Queen Street West and Spadina", 2, 20.0)
 

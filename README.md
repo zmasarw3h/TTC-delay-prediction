@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, API-ready input validation utilities, a Phase 9 local FastAPI prediction service, and a Phase 10 FastAPI-served local demo frontend with planner-oriented controls. SHAP is optional and not required for the default explainability workflow.
+The project currently has reproducible data-cleaning, target-diagnostics, categorical normalization, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, API-ready input validation utilities, a Phase 9 local FastAPI prediction service, and a Phase 10 FastAPI-served local demo frontend with planner-oriented controls. SHAP is optional and not required for the default explainability workflow.
 
 ## Project Structure
 
@@ -99,7 +99,9 @@ test.csv
 feature_metadata.json
 ```
 
-The feature-building step applies the documented `0 <= Min Delay <= 240` modeling target policy and creates leakage-safe historical features using prior rows only. It does not train models.
+The feature-building step applies deterministic categorical normalization before feature creation, preserves raw `Route`, `Direction`, `Incident`, and `Location` values with `_raw` suffixes when available, applies the documented `0 <= Min Delay <= 240` modeling target policy, and creates leakage-safe historical features using prior rows only. It does not train models.
+
+Categorical normalization is documented in `docs/categorical_normalization.md`. It normalizes directions to `N`, `E`, `S`, `W`, `B`, or `Unknown`, maps incident variants to curated operational categories, cleans route identifiers conservatively, and applies safe deterministic location text cleanup only. It does not perform fuzzy location snapping, geocoding, or target-based normalization.
 
 ## Category Quality Audit
 

@@ -37,6 +37,8 @@ Categorical features:
 - `Incident`
 - `Location`
 
+These categorical modeling columns are normalized before feature creation. Raw values for `Route`, `Direction`, `Incident`, and `Location` are preserved with `_raw` suffixes when available. The normalization policy is documented in `docs/categorical_normalization.md`.
+
 Historical features:
 
 - `prior_route_mean_delay`
@@ -57,10 +59,10 @@ Historical features are target-derived and must be prior-only. The feature-build
 
 Definitions:
 
-- `prior_route_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same `Route`
-- `prior_route_hour_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same `Route` and `hour`
-- `prior_incident_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same `Incident`
-- `prior_mode_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same `mode`
+- `prior_route_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same normalized `Route`
+- `prior_route_hour_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same normalized `Route` and `hour`
+- `prior_incident_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same normalized `Incident`
+- `prior_mode_mean_delay`: mean `Min Delay` from rows with `ts < current ts` and the same normalized `mode`
 - `prior_global_mean_delay`: mean `Min Delay` from all rows with `ts < current ts`
 - `prior_route_hour_7d_mean_delay`: mean `Min Delay` from prior incidents with the same `Route` and `hour` whose timestamps are within the previous 7 calendar days and strictly before the current row
 

@@ -14,13 +14,19 @@ from typing import Iterable
 
 import pandas as pd
 
+from src.data.categorical_normalization import (
+    INCIDENT_CATEGORIES,
+    UNKNOWN_CATEGORY,
+    normalize_route,
+)
+
 
 DEFAULT_INPUT = Path("data/processed/modeling/modeling_dataset.csv")
 DEFAULT_OUTPUT_DIR = Path("reports/category_audit")
 AUDIT_COLUMNS = ("mode", "Route", "Direction", "Incident", "Location")
 VALUE_AUDIT_COLUMNS = ("Direction", "Route", "Incident", "Location")
 HEALTHY_DIRECTIONS = {"N", "S", "E", "W", "B", "UNKNOWN"}
-ROUTE_PATTERN = re.compile(r"^(?:\d{1,3}[A-Z]?|RAD)$")
+ROUTE_PATTERN = re.compile(r"^(?:\d{1,4}[A-Z]{0,2}|RAD)$")
 NULL_LIKE_TEXT = {"", "nan", "none", "null", "unknown", "n/a", "na"}
 LOCATION_WORDS = {
     "station",
@@ -79,19 +85,7 @@ INCIDENT_FRAGMENT_GROUPS = {
     "operations": {"operations", "operation", "operator", "operations - operator"},
 }
 COMMON_INCIDENT_LABELS = {
-    "mechanical",
-    "general delay",
-    "operations",
-    "operations - operator",
-    "late leaving garage",
-    "utilized off route",
-    "diversion",
-    "investigation",
-    "emergency services",
-    "security",
-    "collision",
-    "cleaning",
-    "held by",
+    category.lower() for category in INCIDENT_CATEGORIES if category != UNKNOWN_CATEGORY
 }
 
 
@@ -122,8 +116,7 @@ def parse_args() -> argparse.Namespace:
 
 def is_route_like(value: object) -> bool:
     """Return True for route identifiers suitable for route option lists."""
-    text = _clean_value(value).upper()
-    return bool(ROUTE_PATTERN.fullmatch(text))
+    return normalize_route(value) != UNKNOWN_CATEGORY
 
 
 def audit_dataframe(df: pd.DataFrame, *, top_n: int = 25) -> dict[str, object]:
@@ -324,6 +317,8 @@ def _incident_reasons(
 ) -> list[str]:
     lower = value.lower()
     reasons: list[str] = []
+    if _is_null_like(value) or lower in COMMON_INCIDENT_LABELS:
+        return reasons
     if is_route_like(value):
         reasons.append("route-like incident value")
     if _contains_any(lower, LOCATION_WORDS):
@@ -369,7 +364,7 @@ def _looks_like_other_fields(
             fields.append(other_column)
     if column != "Route" and is_route_like(value):
         fields.append("Route")
-    if column != "Direction" and value.upper() in HEALTHY_DIRECTIONS:
+    if column != "Direction" and value.upper() in HEALTHY_DIRECTIONS and value.upper() != "UNKNOWN":
         fields.append("Direction")
     return sorted(set(fields))
 
