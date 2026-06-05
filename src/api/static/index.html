@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TTC Delay Prediction Demo</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div>
+        <p class="eyebrow">Local FastAPI demo</p>
+        <h1>TTC Delay Prediction</h1>
+        <p class="subtitle">Incident-time TTC delay prediction demo</p>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel status-panel" aria-labelledby="status-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Model status</p>
+            <h2 id="status-title">Calibrated two-output service</h2>
+          </div>
+          <span id="artifact-pill" class="pill muted">Checking</span>
+        </div>
+        <div id="model-status" class="status-grid" aria-live="polite">
+          <div class="skeleton">Loading model status...</div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <form id="prediction-form" class="panel form-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Inputs</p>
+              <h2>Incident details</h2>
+            </div>
+          </div>
+
+          <div class="preset-row" aria-label="Demo presets">
+            <button type="button" class="preset-button active" data-preset="bus">Bus incident</button>
+            <button type="button" class="preset-button" data-preset="streetcar">Streetcar incident</button>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              <span>Mode</span>
+              <select id="mode" name="mode" required>
+                <option value="bus">bus</option>
+                <option value="streetcar">streetcar</option>
+              </select>
+            </label>
+            <label>
+              <span>Route</span>
+              <input id="Route" name="Route" autocomplete="off" required />
+            </label>
+            <label>
+              <span>Direction</span>
+              <input id="Direction" name="Direction" autocomplete="off" required />
+            </label>
+            <label>
+              <span>Incident</span>
+              <input id="Incident" name="Incident" autocomplete="off" required />
+            </label>
+            <label class="wide">
+              <span>Location</span>
+              <input id="Location" name="Location" autocomplete="off" required />
+            </label>
+            <label>
+              <span>Timestamp</span>
+              <input id="timestamp" name="timestamp" type="datetime-local" required />
+            </label>
+          </div>
+
+          <details class="advanced" open>
+            <summary>Advanced historical features</summary>
+            <p class="helper">
+              These are normally computed from prior TTC incident records before prediction time.
+            </p>
+            <div class="form-grid numeric-grid">
+              <label>
+                <span>prior_route_mean_delay</span>
+                <input id="prior_route_mean_delay" name="prior_route_mean_delay" type="number" step="0.1" />
+              </label>
+              <label>
+                <span>prior_route_hour_mean_delay</span>
+                <input
+                  id="prior_route_hour_mean_delay"
+                  name="prior_route_hour_mean_delay"
+                  type="number"
+                  step="0.1"
+                />
+              </label>
+              <label>
+                <span>prior_incident_mean_delay</span>
+                <input id="prior_incident_mean_delay" name="prior_incident_mean_delay" type="number" step="0.1" />
+              </label>
+              <label>
+                <span>prior_mode_mean_delay</span>
+                <input id="prior_mode_mean_delay" name="prior_mode_mean_delay" type="number" step="0.1" />
+              </label>
+              <label>
+                <span>prior_global_mean_delay</span>
+                <input id="prior_global_mean_delay" name="prior_global_mean_delay" type="number" step="0.1" />
+              </label>
+              <label>
+                <span>prior_route_hour_7d_mean_delay</span>
+                <input
+                  id="prior_route_hour_7d_mean_delay"
+                  name="prior_route_hour_7d_mean_delay"
+                  type="number"
+                  step="0.1"
+                />
+              </label>
+            </div>
+          </details>
+
+          <button id="submit-button" class="submit-button" type="submit">Predict delay</button>
+        </form>
+
+        <section class="panel results-panel" aria-labelledby="results-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Prediction</p>
+              <h2 id="results-title">Results</h2>
+            </div>
+          </div>
+          <div id="results" class="results-empty" aria-live="polite">
+            Submit an incident payload to view calibrated delay and risk outputs.
+          </div>
+        </section>
+      </section>
+
+      <section class="panel limitations" aria-labelledby="limitations-title">
+        <p class="eyebrow">Limitations</p>
+        <h2 id="limitations-title">Local demo boundaries</h2>
+        <ul>
+          <li>This demo expects engineered incident-time features.</li>
+          <li>Historical prior-delay features are not computed automatically yet.</li>
+          <li>Raw TTC incident-to-feature lookup is not implemented yet.</li>
+          <li>Weather enrichment is not implemented yet.</li>
+          <li>Predictions depend on quality of provided historical features.</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

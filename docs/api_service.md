@@ -2,7 +2,7 @@
 
 ## Scope
 
-Phase 9 adds a local FastAPI service for the existing calibrated two-output model artifact. It does not train models, run Optuna, compute SHAP values, add weather enrichment, or implement a frontend.
+Phase 9 adds a local FastAPI service for the existing calibrated two-output model artifact. Phase 10 adds a thin static frontend served by the same FastAPI app. It does not train models, run Optuna, compute SHAP values, add weather enrichment, or implement deployment.
 
 The default model artifact path is:
 
@@ -25,9 +25,49 @@ From the repository root:
 uvicorn src.api.app:app --reload
 ```
 
+Open the local demo UI at:
+
+```text
+http://127.0.0.1:8000/
+```
+
 The app is import-safe and loads the artifact lazily on the first endpoint that needs model metadata or predictions.
 
+## Local Demo UI
+
+The FastAPI app serves a lightweight static frontend from `src/api/static/`.
+
+Frontend URL:
+
+```text
+http://127.0.0.1:8000/
+```
+
+Static assets:
+
+```text
+/static/styles.css
+/static/app.js
+```
+
+The demo fetches `/health` and `/model-info` on page load, then submits engineered incident-time payloads to `/predict-delay`. It displays expected delay minutes, calibrated `30+` and `60+` minute probabilities, risk bands, binary severe-delay flags, and API warnings.
+
+The UI includes exactly two presets:
+
+- Bus incident: a bus example with reasonable prior-delay feature values and a timestamp so calendar fields are derived by the API.
+- Streetcar incident: a streetcar example with reasonable prior-delay feature values and a timestamp so calendar fields are derived by the API.
+
+This is a local demo UI only. It still expects engineered incident-time features; raw TTC incident-to-feature lookup and weather enrichment are not implemented.
+
 ## Endpoints
+
+### `GET /`
+
+Serves the local static demo frontend.
+
+### `GET /static/styles.css` and `GET /static/app.js`
+
+Serve the frontend CSS and JavaScript assets.
 
 ### `GET /health`
 

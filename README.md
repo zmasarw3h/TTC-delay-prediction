@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, API-ready input validation utilities, and a Phase 9 local FastAPI prediction service. Frontend code is not implemented yet. SHAP is optional and not required for the default explainability workflow.
+The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, API-ready input validation utilities, a Phase 9 local FastAPI prediction service, and a Phase 10 FastAPI-served local demo frontend. SHAP is optional and not required for the default explainability workflow.
 
 ## Project Structure
 
@@ -261,11 +261,22 @@ These are local generated reports. The API uses the existing calibrated artifact
 
 ## FastAPI Prediction Service
 
-Run the local Phase 9 API service from the repository root:
+Run the local Phase 9 API service and Phase 10 demo frontend from the repository root:
 
 ```bash
 uvicorn src.api.app:app --reload
 ```
+
+Open the local demo UI:
+
+```text
+http://127.0.0.1:8000/
+```
+
+The demo includes exactly two presets:
+
+- Bus incident
+- Streetcar incident
 
 By default, the API loads:
 
@@ -285,6 +296,9 @@ Endpoints:
 - `GET /health`
 - `GET /model-info`
 - `POST /predict-delay`
+- `GET /`
+- `GET /static/styles.css`
+- `GET /static/app.js`
 
 Example prediction request:
 
@@ -307,7 +321,7 @@ curl -X POST http://127.0.0.1:8000/predict-delay \
   }'
 ```
 
-The prediction endpoint can derive time fields and the Ontario holiday flag from `timestamp`. It still expects prior-only historical delay features, or it will rely on model-pipeline imputation with a warning. It does not yet implement raw incident-to-feature lookup or weather enrichment. Frontend code is not implemented yet.
+The prediction endpoint can derive time fields and the Ontario holiday flag from `timestamp`. It still expects prior-only historical delay features, or it will rely on model-pipeline imputation with a warning. It does not yet implement raw incident-to-feature lookup or weather enrichment. The frontend is a local demo UI served by FastAPI, not a deployed application.
 
 ## API Input Validation
 

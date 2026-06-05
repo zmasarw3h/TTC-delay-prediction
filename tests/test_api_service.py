@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 
 import joblib
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+from src.api.input_validation import LEAKAGE_FIELDS
 from src.features.build_features import FEATURE_COLUMNS
+
+
+STATIC_DIR = Path(__file__).resolve().parents[1] / "src" / "api" / "static"
 
 
 class FakeRegressor:
@@ -102,6 +107,40 @@ def valid_payload() -> dict:
         "prior_global_mean_delay": 7.0,
         "prior_route_hour_7d_mean_delay": 11.0,
     }
+
+
+def test_root_serves_demo_frontend(client):
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Incident-time TTC delay prediction demo" in response.text
+    assert response.text.count('data-preset="') == 2
+    assert 'data-preset="bus"' in response.text
+    assert 'data-preset="streetcar"' in response.text
+
+
+def test_static_demo_files_are_served(client):
+    for path, expected_text in [
+        ("/static/styles.css", ".site-header"),
+        ("/static/app.js", "POST"),
+    ]:
+        response = client.get(path)
+
+        assert response.status_code == 200
+        assert expected_text in response.text
+
+
+def test_demo_static_files_exist():
+    for filename in ["index.html", "styles.css", "app.js"]:
+        assert (STATIC_DIR / filename).exists()
+
+
+def test_demo_preset_payloads_do_not_include_leakage_fields():
+    app_js = (STATIC_DIR / "app.js").read_text()
+
+    for field in LEAKAGE_FIELDS:
+        assert field not in app_js
 
 
 def test_health_works(client, fake_artifact_path):
