@@ -217,7 +217,8 @@ def audit_value(
         if lower not in {"bus", "streetcar"}:
             reasons.append("unexpected mode value")
 
-    looks_like_fields = _looks_like_other_fields(column, text, value_sets or {})
+    if not _is_known_incident_category(column, text):
+        looks_like_fields = _looks_like_other_fields(column, text, value_sets or {})
     suspicious = bool(reasons or looks_like_fields)
     return ValueAudit(
         column=column,
@@ -317,7 +318,7 @@ def _incident_reasons(
 ) -> list[str]:
     lower = value.lower()
     reasons: list[str] = []
-    if _is_null_like(value) or lower in COMMON_INCIDENT_LABELS:
+    if _is_null_like(value) or _is_known_incident_category("Incident", value):
         return reasons
     if is_route_like(value):
         reasons.append("route-like incident value")
@@ -330,6 +331,10 @@ def _incident_reasons(
             reasons.append(f"possible fragmented incident label: {group_name}")
             break
     return reasons
+
+
+def _is_known_incident_category(column: str, value: str) -> bool:
+    return column == "Incident" and _clean_value(value).lower() in COMMON_INCIDENT_LABELS
 
 
 def _location_reasons(value: str) -> list[str]:

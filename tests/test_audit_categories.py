@@ -22,6 +22,25 @@ def test_direction_audit_treats_normalized_values_as_healthy():
         assert result.suspicious is False
 
 
+def test_incident_audit_treats_curated_normalized_categories_as_healthy():
+    for value in [
+        "Utilized Off Route",
+        "General Delay",
+        "Late Leaving Garage",
+        "Road Blocked - NON-TTC Collision",
+    ]:
+        result = audit_value("Incident", value, 1, 10.0)
+
+        assert result.suspicious is False
+
+
+def test_incident_audit_still_flags_unknown_rare_malformed_labels():
+    result = audit_value("Incident", "Garage route collision note typo", 1, 10.0)
+
+    assert result.suspicious is True
+    assert "extremely rare incident label" in result.reasons
+
+
 def test_route_audit_flags_long_text_route_values():
     result = audit_value("Route", "Queen Street West and Spadina", 2, 20.0)
 
