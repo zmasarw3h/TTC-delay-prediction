@@ -6,28 +6,28 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, and API-ready input validation utilities. FastAPI and frontend code are not implemented yet. SHAP is optional and not required for the default explainability workflow.
+The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, API-ready input validation utilities, and a Phase 9 local FastAPI prediction service. Frontend code is not implemented yet. SHAP is optional and not required for the default explainability workflow.
 
 ## Project Structure
 
 ```text
 data/
   raw/          # local raw TTC files, gitignored
-  processed/    # cleaned CSV outputs, gitignored
+  processed/    # cleaned and modeling CSV outputs, gitignored
 docs/           # project planning and modeling assumptions
 notebooks/      # clean explanatory notebooks for later phases
 src/data/       # reproducible loading and cleaning scripts
-src/features/   # planned leakage-safe feature engineering
-src/models/     # planned modeling code
-src/api/        # planned API code
-reports/        # planned generated reporting outputs
-artifacts/      # planned model/pipeline artifacts, gitignored
+src/features/   # leakage-safe feature engineering
+src/models/     # reproducible modeling scripts
+src/api/        # FastAPI service and input validation
+reports/        # generated reporting outputs, gitignored except placeholders
+artifacts/      # model/pipeline artifacts, gitignored except placeholders
 tests/          # lightweight validation tests
 ```
 
 ## Setup
 
-Create and activate a virtual environment, then install the Phase 4 dependencies:
+Create and activate a virtual environment, then install the project dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -228,7 +228,7 @@ reports/calibration/calibrated_two_output_predictions_validation.csv
 reports/calibration/calibrated_two_output_predictions_test.csv
 ```
 
-The calibrated artifact is written to `artifacts/calibration/calibrated_two_output_model.joblib`. These calibrated probabilities are intended for the later API; API and frontend code are still not implemented.
+The calibrated artifact is written to `artifacts/calibration/calibrated_two_output_model.joblib`. These calibrated probabilities are served by the local FastAPI prediction service. Frontend code is still not implemented.
 
 ## Model Explainability
 
@@ -257,11 +257,62 @@ reports/explainability/figures/top_features_risk_30.png
 reports/explainability/figures/top_features_risk_60.png
 ```
 
-These are local generated reports. API and frontend code are still not implemented.
+These are local generated reports. The API uses the existing calibrated artifact and does not generate explainability output at request time.
+
+## FastAPI Prediction Service
+
+Run the local Phase 9 API service from the repository root:
+
+```bash
+uvicorn src.api.app:app --reload
+```
+
+By default, the API loads:
+
+```text
+artifacts/calibration/calibrated_two_output_model.joblib
+```
+
+You can override the artifact path with:
+
+```bash
+TTC_MODEL_ARTIFACT_PATH=/path/to/calibrated_two_output_model.joblib \
+uvicorn src.api.app:app --reload
+```
+
+Endpoints:
+
+- `GET /health`
+- `GET /model-info`
+- `POST /predict-delay`
+
+Example prediction request:
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict-delay \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "bus",
+    "Route": "29",
+    "Direction": "N",
+    "Incident": "Mechanical",
+    "Location": "Dufferin Station",
+    "timestamp": "2024-02-03T08:30:00",
+    "is_holiday": 0,
+    "prior_route_mean_delay": 10.0,
+    "prior_route_hour_mean_delay": 12.0,
+    "prior_incident_mean_delay": 9.0,
+    "prior_mode_mean_delay": 8.0,
+    "prior_global_mean_delay": 7.0,
+    "prior_route_hour_7d_mean_delay": 11.0
+  }'
+```
+
+The prediction endpoint expects engineered model features, including prior-only historical delay features. It does not yet implement raw incident-to-feature lookup or weather enrichment. Frontend code is not implemented yet.
 
 ## API Input Validation
 
-API-ready validation helpers live in `src/api/input_validation.py`. They normalize engineered model feature payloads, preserve route categories such as `29`, `501`, and `RAD`, convert missing categorical inputs to `Unknown`, keep missing numeric historical features as `None` for model-pipeline imputation, and reject leakage-sensitive fields. See [API input contract](docs/api_input_contract.md) for the current contract. FastAPI is the next phase and has not been created yet.
+API-ready validation helpers live in `src/api/input_validation.py`. They normalize engineered model feature payloads, preserve route categories such as `29`, `501`, and `RAD`, convert missing categorical inputs to `Unknown`, keep missing numeric historical features as `None` for model-pipeline imputation, and reject leakage-sensitive fields. See [API input contract](docs/api_input_contract.md) and [FastAPI service docs](docs/api_service.md) for the current contract.
 
 ## Planning Docs
 
@@ -278,3 +329,4 @@ API-ready validation helpers live in `src/api/input_validation.py`. They normali
 - [Probability calibration](docs/probability_calibration.md)
 - [Model explainability](docs/explainability.md)
 - [API input contract](docs/api_input_contract.md)
+- [FastAPI service](docs/api_service.md)

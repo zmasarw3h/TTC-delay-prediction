@@ -1,0 +1,169 @@
+# FastAPI Prediction Service
+
+## Scope
+
+Phase 9 adds a local FastAPI service for the existing calibrated two-output model artifact. It does not train models, run Optuna, compute SHAP values, add weather enrichment, or implement a frontend.
+
+The default model artifact path is:
+
+```text
+artifacts/calibration/calibrated_two_output_model.joblib
+```
+
+Set `TTC_MODEL_ARTIFACT_PATH` to load a different local artifact:
+
+```bash
+TTC_MODEL_ARTIFACT_PATH=/path/to/calibrated_two_output_model.joblib \
+uvicorn src.api.app:app --reload
+```
+
+## Local Run
+
+From the repository root:
+
+```bash
+uvicorn src.api.app:app --reload
+```
+
+The app is import-safe and loads the artifact lazily on the first endpoint that needs model metadata or predictions.
+
+## Endpoints
+
+### `GET /health`
+
+Returns service status, whether the model artifact is currently loaded in memory, and the configured artifact path.
+
+### `GET /model-info`
+
+Returns model metadata:
+
+- model name
+- model phase
+- feature columns
+- target column
+- risk thresholds
+- selected calibration methods
+- selected operating cutoffs
+- risk band definitions
+- notes and limitations
+
+### `POST /predict-delay`
+
+Returns one calibrated two-output prediction for an engineered incident-time feature payload:
+
+- expected delay in minutes
+- calibrated severe-delay probabilities for `30+` and `60+` minute thresholds
+- risk bands
+- selected binary severe-delay decisions using validation-selected probability cutoffs
+- non-fatal validation warnings
+
+## Engineered Feature Input Contract
+
+The current model requires engineered model features in the exact artifact feature order. Required model features are:
+
+```text
+mode
+Route
+Direction
+Incident
+Location
+hour
+day_of_week
+month
+is_weekend
+is_holiday
+hour_sin
+hour_cos
+day_of_year
+day_sin
+day_cos
+prior_route_mean_delay
+prior_route_hour_mean_delay
+prior_incident_mean_delay
+prior_mode_mean_delay
+prior_global_mean_delay
+prior_route_hour_7d_mean_delay
+```
+
+The request may also include `timestamp`. If `timestamp` is provided and time-derived fields are missing, the API derives:
+
+```text
+hour
+day_of_week
+month
+is_weekend
+day_of_year
+hour_sin
+hour_cos
+day_sin
+day_cos
+```
+
+The API does not derive `is_holiday` from a calendar. If `is_holiday` is missing, it is set to `0` and the response includes a warning.
+
+Historical features are required because the trained model uses prior-only delay context, such as route-level and route-hour delay means. These values must be computed from incidents strictly before the prediction moment. The API does not currently include a feature store or raw incident-to-feature lookup layer, so callers must provide these engineered historical values. Missing historical numeric features may be passed as `null` so the model pipeline can impute, but the response warns that prediction reliability may be reduced.
+
+## Example Request
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict-delay \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "bus",
+    "Route": "29",
+    "Direction": "N",
+    "Incident": "Mechanical",
+    "Location": "Dufferin Station",
+    "timestamp": "2024-02-03T08:30:00",
+    "is_holiday": 0,
+    "prior_route_mean_delay": 10.0,
+    "prior_route_hour_mean_delay": 12.0,
+    "prior_incident_mean_delay": 9.0,
+    "prior_mode_mean_delay": 8.0,
+    "prior_global_mean_delay": 7.0,
+    "prior_route_hour_7d_mean_delay": 11.0
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "predicted_delay_minutes": 12.5,
+  "calibrated_severe_delay_probability_30": 0.35,
+  "risk_band_30": "high",
+  "severe_delay_prediction_30": 1,
+  "selected_probability_cutoff_30": 0.2,
+  "calibrated_severe_delay_probability_60": 0.08,
+  "risk_band_60": "low",
+  "severe_delay_prediction_60": 0,
+  "selected_probability_cutoff_60": 0.3,
+  "warnings": [
+    "Derived missing time fields from timestamp."
+  ],
+  "model_name": "calibrated_two_output_delay_and_risk_model",
+  "model_phase": "Phase 7C"
+}
+```
+
+## Validation
+
+The API rejects leakage-sensitive fields:
+
+```text
+Min Delay
+Min Gap
+Vehicle
+source_file
+source_sheet
+severe_delay_15
+```
+
+`mode` must be `bus` or `streetcar`. Unknown route, incident, location, or unusual direction values are normalized and may return warnings instead of crashing.
+
+## Limitations
+
+- Raw incident-to-feature lookup is not implemented yet.
+- Weather enrichment is not included yet.
+- Predictions depend on the quality of provided historical prior-delay features.
+- The API is local/demo-ready, not production-deployed.
