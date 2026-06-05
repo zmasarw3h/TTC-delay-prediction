@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, and Phase 8 model explainability reports. Optuna tuning, FastAPI, and frontend code are not implemented yet. SHAP is optional and not required for the default explainability workflow.
+The project currently has reproducible data-cleaning, target-diagnostics, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, and API-ready input validation utilities. FastAPI and frontend code are not implemented yet. SHAP is optional and not required for the default explainability workflow.
 
 ## Project Structure
 
@@ -259,6 +259,10 @@ reports/explainability/figures/top_features_risk_60.png
 
 These are local generated reports. API and frontend code are still not implemented.
 
+## API Input Validation
+
+API-ready validation helpers live in `src/api/input_validation.py`. They normalize engineered model feature payloads, preserve route categories such as `29`, `501`, and `RAD`, convert missing categorical inputs to `Unknown`, keep missing numeric historical features as `None` for model-pipeline imputation, and reject leakage-sensitive fields. See [API input contract](docs/api_input_contract.md) for the current contract. FastAPI is the next phase and has not been created yet.
+
 ## Planning Docs
 
 - [Project definition](docs/project_definition.md)
@@ -273,3 +277,4 @@ These are local generated reports. API and frontend code are still not implement
 - [Two-output delay and risk model](docs/two_output_model.md)
 - [Probability calibration](docs/probability_calibration.md)
 - [Model explainability](docs/explainability.md)
+- [API input contract](docs/api_input_contract.md)
