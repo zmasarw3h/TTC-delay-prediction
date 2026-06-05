@@ -58,6 +58,7 @@ class EngineeredIncidentFeatures(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     model_artifact_loaded: bool
+    artifact_exists: bool
     artifact_path: str
 
 

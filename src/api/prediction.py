@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,22 +11,12 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from src.api.feature_derivation import TIME_FEATURE_FIELDS, derive_time_features
 from src.api.input_validation import validate_model_features
 from src.features.build_features import HISTORICAL_FEATURES
 
 
 DEFAULT_MODEL_ARTIFACT_PATH = Path("artifacts/calibration/calibrated_two_output_model.joblib")
-TIME_DERIVED_FIELDS = [
-    "hour",
-    "day_of_week",
-    "month",
-    "is_weekend",
-    "day_of_year",
-    "hour_sin",
-    "hour_cos",
-    "day_sin",
-    "day_cos",
-]
 API_LIMITATION_NOTES = [
     "The API expects engineered incident-time model features, not raw TTC incident records.",
     "Historical prior-delay features must be computed from records before the prediction moment.",
@@ -202,24 +191,22 @@ def _derive_time_fields(payload: Mapping[str, Any]) -> tuple[dict[str, Any], lis
     enriched = dict(payload)
     warnings: list[str] = []
     timestamp = enriched.get("timestamp")
-    if timestamp is not None and any(enriched.get(field) is None for field in TIME_DERIVED_FIELDS):
-        ts = pd.Timestamp(timestamp)
-        enriched["hour"] = ts.hour
-        enriched["day_of_week"] = ts.dayofweek
-        enriched["month"] = ts.month
-        enriched["is_weekend"] = int(ts.dayofweek in {5, 6})
-        enriched["day_of_year"] = ts.dayofyear
-        enriched["hour_sin"] = math.sin(2 * math.pi * ts.hour / 24)
-        enriched["hour_cos"] = math.cos(2 * math.pi * ts.hour / 24)
-        enriched["day_sin"] = math.sin(2 * math.pi * ts.dayofyear / 366)
-        enriched["day_cos"] = math.cos(2 * math.pi * ts.dayofyear / 366)
-        warnings.append("Derived missing time fields from timestamp.")
+    if timestamp is not None:
+        derived = derive_time_features(timestamp)
+        missing_time_fields = [field for field in TIME_FEATURE_FIELDS if enriched.get(field) is None]
+        for field in missing_time_fields:
+            enriched[field] = derived[field]
+        if missing_time_fields:
+            warnings.append("Derived missing time fields from timestamp.")
 
-    if enriched.get("is_holiday") is None:
+        if enriched.get("is_holiday") is None:
+            enriched["is_holiday"] = derived["is_holiday"]
+            warnings.append("Derived is_holiday from timestamp.")
+        else:
+            warnings.append("is_holiday was provided by caller and was not overwritten.")
+    elif enriched.get("is_holiday") is None:
         enriched["is_holiday"] = 0
-        warnings.append(
-            "is_holiday was missing and set to 0; no reliable holiday calendar lookup is implemented."
-        )
+        warnings.append("is_holiday was missing and set to 0 because no timestamp was provided.")
     return enriched, warnings
 
 

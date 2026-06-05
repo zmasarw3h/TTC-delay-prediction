@@ -13,9 +13,11 @@ from src.features.build_features import FEATURE_COLUMNS
 class FakeRegressor:
     def __init__(self) -> None:
         self.seen_columns: list[str] | None = None
+        self.seen_frame = None
 
     def predict(self, frame):
         self.seen_columns = list(frame.columns)
+        self.seen_frame = frame.copy()
         return np.array([12.5])
 
 
@@ -109,6 +111,7 @@ def test_health_works(client, fake_artifact_path):
     assert response.json() == {
         "status": "ok",
         "model_artifact_loaded": False,
+        "artifact_exists": True,
         "artifact_path": str(fake_artifact_path),
     }
 
@@ -187,7 +190,96 @@ def test_timestamp_derived_time_fields_work(client):
     assert response.status_code == 200
     body = response.json()
     assert any("Derived missing time fields" in warning for warning in body["warnings"])
-    assert any("is_holiday was missing and set to 0" in warning for warning in body["warnings"])
+    assert any("Derived is_holiday from timestamp" in warning for warning in body["warnings"])
+    app_module = importlib.import_module("src.api.app")
+    scored = app_module.prediction_service.artifact["expected_delay_regressor"].seen_frame.iloc[0]
+    assert scored["hour"] == 8
+    assert scored["day_of_week"] == 5
+    assert scored["month"] == 2
+    assert scored["is_weekend"] == 1
+    assert scored["day_of_year"] == 34
+    assert scored["is_holiday"] == 0
+
+
+def test_timestamp_derives_holiday_flag(client):
+    payload = valid_payload()
+    for field in [
+        "hour",
+        "day_of_week",
+        "month",
+        "is_weekend",
+        "hour_sin",
+        "hour_cos",
+        "day_of_year",
+        "day_sin",
+        "day_cos",
+        "is_holiday",
+    ]:
+        payload.pop(field)
+    payload["timestamp"] = "2024-12-25T08:30:00"
+
+    response = client.post("/predict-delay", json=payload)
+
+    assert response.status_code == 200
+    app_module = importlib.import_module("src.api.app")
+    scored = app_module.prediction_service.artifact["expected_delay_regressor"].seen_frame.iloc[0]
+    assert scored["is_holiday"] == 1
+
+
+def test_provided_is_holiday_is_not_overwritten(client):
+    payload = valid_payload()
+    for field in [
+        "hour",
+        "day_of_week",
+        "month",
+        "is_weekend",
+        "hour_sin",
+        "hour_cos",
+        "day_of_year",
+        "day_sin",
+        "day_cos",
+    ]:
+        payload.pop(field)
+    payload["timestamp"] = "2024-12-25T08:30:00"
+    payload["is_holiday"] = 0
+
+    response = client.post("/predict-delay", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert any("is_holiday was provided by caller and was not overwritten" in warning for warning in body["warnings"])
+    app_module = importlib.import_module("src.api.app")
+    scored = app_module.prediction_service.artifact["expected_delay_regressor"].seen_frame.iloc[0]
+    assert scored["is_holiday"] == 0
+
+
+def test_missing_timestamp_and_missing_is_holiday_falls_back_to_zero(client):
+    payload = valid_payload()
+    payload.pop("timestamp", None)
+    payload.pop("is_holiday")
+
+    response = client.post("/predict-delay", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert any(
+        "is_holiday was missing and set to 0 because no timestamp was provided" in warning
+        for warning in body["warnings"]
+    )
+    app_module = importlib.import_module("src.api.app")
+    scored = app_module.prediction_service.artifact["expected_delay_regressor"].seen_frame.iloc[0]
+    assert scored["is_holiday"] == 0
+
+
+def test_invalid_timestamp_returns_clear_error(client):
+    payload = valid_payload()
+    payload["timestamp"] = "not-a-date"
+    payload.pop("is_holiday")
+
+    response = client.post("/predict-delay", json=payload)
+
+    assert response.status_code == 422
+    assert "Invalid timestamp" in response.text
 
 
 def test_feature_order_matches_artifact_feature_columns(client):

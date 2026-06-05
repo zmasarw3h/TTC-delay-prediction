@@ -298,7 +298,6 @@ curl -X POST http://127.0.0.1:8000/predict-delay \
     "Incident": "Mechanical",
     "Location": "Dufferin Station",
     "timestamp": "2024-02-03T08:30:00",
-    "is_holiday": 0,
     "prior_route_mean_delay": 10.0,
     "prior_route_hour_mean_delay": 12.0,
     "prior_incident_mean_delay": 9.0,
@@ -308,7 +307,7 @@ curl -X POST http://127.0.0.1:8000/predict-delay \
   }'
 ```
 
-The prediction endpoint expects engineered model features, including prior-only historical delay features. It does not yet implement raw incident-to-feature lookup or weather enrichment. Frontend code is not implemented yet.
+The prediction endpoint can derive time fields and the Ontario holiday flag from `timestamp`. It still expects prior-only historical delay features, or it will rely on model-pipeline imputation with a warning. It does not yet implement raw incident-to-feature lookup or weather enrichment. Frontend code is not implemented yet.
 
 ## API Input Validation
 

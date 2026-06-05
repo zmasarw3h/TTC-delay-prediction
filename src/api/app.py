@@ -28,6 +28,7 @@ def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         model_artifact_loaded=prediction_service.is_loaded,
+        artifact_exists=prediction_service.artifact_path.exists(),
         artifact_path=str(prediction_service.artifact_path),
     )
 

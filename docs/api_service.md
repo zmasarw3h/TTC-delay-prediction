@@ -31,7 +31,7 @@ The app is import-safe and loads the artifact lazily on the first endpoint that 
 
 ### `GET /health`
 
-Returns service status, whether the model artifact is currently loaded in memory, and the configured artifact path.
+Returns service status, whether the model artifact is currently loaded in memory, whether the configured artifact file exists, and the configured artifact path.
 
 ### `GET /model-info`
 
@@ -85,13 +85,14 @@ prior_global_mean_delay
 prior_route_hour_7d_mean_delay
 ```
 
-The request may also include `timestamp`. If `timestamp` is provided and time-derived fields are missing, the API derives:
+Callers usually only need to provide the categorical incident fields, `timestamp`, and the historical prior-delay features. If `timestamp` is provided and time-derived fields are missing, the API derives:
 
 ```text
 hour
 day_of_week
 month
 is_weekend
+is_holiday
 day_of_year
 hour_sin
 hour_cos
@@ -99,7 +100,7 @@ day_sin
 day_cos
 ```
 
-The API does not derive `is_holiday` from a calendar. If `is_holiday` is missing, it is set to `0` and the response includes a warning.
+`is_holiday` is derived from Canadian/Ontario-relevant holidays using the timestamp date. If `is_holiday` is provided by the caller, the API keeps that value and returns a warning that it was not overwritten. If no timestamp is provided and `is_holiday` is missing, it is set to `0` and the response includes a warning.
 
 Historical features are required because the trained model uses prior-only delay context, such as route-level and route-hour delay means. These values must be computed from incidents strictly before the prediction moment. The API does not currently include a feature store or raw incident-to-feature lookup layer, so callers must provide these engineered historical values. Missing historical numeric features may be passed as `null` so the model pipeline can impute, but the response warns that prediction reliability may be reduced.
 
@@ -115,7 +116,6 @@ curl -X POST http://127.0.0.1:8000/predict-delay \
     "Incident": "Mechanical",
     "Location": "Dufferin Station",
     "timestamp": "2024-02-03T08:30:00",
-    "is_holiday": 0,
     "prior_route_mean_delay": 10.0,
     "prior_route_hour_mean_delay": 12.0,
     "prior_incident_mean_delay": 9.0,
@@ -139,7 +139,8 @@ curl -X POST http://127.0.0.1:8000/predict-delay \
   "severe_delay_prediction_60": 0,
   "selected_probability_cutoff_60": 0.3,
   "warnings": [
-    "Derived missing time fields from timestamp."
+    "Derived missing time fields from timestamp.",
+    "Derived is_holiday from timestamp."
   ],
   "model_name": "calibrated_two_output_delay_and_risk_model",
   "model_phase": "Phase 7C"
