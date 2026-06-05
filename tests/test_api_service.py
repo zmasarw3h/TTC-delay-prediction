@@ -64,9 +64,9 @@ def fake_artifact_path(tmp_path):
         },
         "known_categories": {
             "mode": ["bus", "streetcar"],
-            "Route": ["29", "501"],
-            "Direction": ["N", "S", "E"],
-            "Incident": ["Mechanical", "Operations"],
+            "Route": ["29", "501", "32A", "RAD", "Mechanical delay at station"],
+            "Direction": ["N", "S", "E", "Mechanical delay at station"],
+            "Incident": ["Mechanical", "Operations", "501"],
             "Location": [
                 "Dufferin Station",
                 "Queen Street West and Spadina Avenue",
@@ -180,12 +180,24 @@ def test_model_options_returns_expected_structure(client):
     assert response.status_code == 200
     body = response.json()
     assert body["modes"] == ["bus", "streetcar"]
-    assert body["routes"] == ["29", "501"]
-    assert body["directions"] == ["E", "N", "S"]
-    assert body["incidents"] == ["Mechanical", "Operations"]
+    assert body["routes"] == ["29", "501", "32A", "RAD"]
+    assert body["directions"] == ["N", "E", "S", "W"]
+    assert "Mechanical" in body["incidents"]
+    assert "Operations" in body["incidents"]
+    assert "501" not in body["incidents"]
     assert "Dufferin Station" in body["locations"]
     assert body["counts"]["locations"] == 2
-    assert body["warnings"] == []
+    assert "Mechanical delay at station" not in body["directions"]
+    assert any("Excluded 1 non-route-like Route" in warning for warning in body["warnings"])
+
+
+def test_model_options_directions_are_fixed_even_with_polluted_artifact(client):
+    response = client.get("/model-options")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["directions"] == ["N", "E", "S", "W"]
+    assert "Mechanical delay at station" not in body["directions"]
 
 
 def test_match_location_handles_exact_match(client):

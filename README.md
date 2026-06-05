@@ -101,6 +101,16 @@ feature_metadata.json
 
 The feature-building step applies the documented `0 <= Min Delay <= 240` modeling target policy and creates leakage-safe historical features using prior rows only. It does not train models.
 
+## Category Quality Audit
+
+Audit modeling-data category health before using raw categories for UI options or API validation:
+
+```bash
+python -m src.data.audit_categories --input data/processed/modeling/modeling_dataset.csv --output-dir reports/category_audit
+```
+
+This writes category quality reports under `reports/category_audit/`. The command does not train models or modify model artifacts.
+
 ## Baseline Evaluation
 
 Evaluate Phase 6A historical baseline predictors on the existing validation and test splits:

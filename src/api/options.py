@@ -7,6 +7,8 @@ import string
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from src.data.audit_categories import audit_value, is_route_like
+
 try:  # pragma: no cover - exercised when optional dependency is installed.
     from rapidfuzz import fuzz, process
 except ImportError:  # pragma: no cover - fallback is covered in tests.
@@ -16,7 +18,22 @@ except ImportError:  # pragma: no cover - fallback is covered in tests.
 
 OPTION_FIELDS = ("mode", "Route", "Direction", "Incident", "Location")
 DEFAULT_MODES = ["bus", "streetcar"]
-DEFAULT_DIRECTIONS = ["N", "S", "E", "W", "B", "Unknown"]
+DEFAULT_DIRECTIONS = ["N", "E", "S", "W"]
+CURATED_INCIDENTS = [
+    "Mechanical",
+    "General Delay",
+    "Operations",
+    "Operations - Operator",
+    "Late Leaving Garage",
+    "Utilized Off Route",
+    "Diversion",
+    "Investigation",
+    "Emergency Services",
+    "Security",
+    "Collision",
+    "Cleaning",
+    "Held By",
+]
 HIGH_CONFIDENCE_LOCATION_SCORE = 90.0
 MEDIUM_CONFIDENCE_LOCATION_SCORE = 75.0
 
@@ -52,26 +69,23 @@ def model_options_from_categories(
     categories = known_categories or {}
     warnings: list[str] = []
 
-    modes = _category_values(categories, "mode") or DEFAULT_MODES
-    directions = _category_values(categories, "Direction") or DEFAULT_DIRECTIONS
-    routes = _category_values(categories, "Route")
-    incidents = _category_values(categories, "Incident")
+    modes = DEFAULT_MODES
+    directions = DEFAULT_DIRECTIONS
+    raw_directions = _category_values(categories, "Direction")
+    raw_routes = _category_values(categories, "Route")
+    routes, route_warnings = _filtered_route_options(raw_routes)
+    raw_incidents = _category_values(categories, "Incident")
+    incidents = CURATED_INCIDENTS.copy()
     locations = _category_values(categories, "Location")
+    warnings.extend(route_warnings)
+    warnings.extend(_ignored_direction_warnings(raw_directions))
+    warnings.extend(_ignored_incident_warnings(raw_incidents))
 
-    for field_name, values in [
-        ("Route", routes),
-        ("Incident", incidents),
-        ("Location", locations),
-    ]:
+    for field_name, values in [("Route", routes), ("Location", locations)]:
         if not values:
             warnings.append(
                 f"{field_name} options were not available from the model artifact."
             )
-
-    if "mode" not in categories:
-        warnings.append("Mode options used built-in defaults.")
-    if "Direction" not in categories:
-        warnings.append("Direction options used built-in defaults.")
 
     options = {
         "modes": modes,
@@ -185,6 +199,51 @@ def _category_values(categories: Mapping[str, list[str]], field_name: str) -> li
     values = categories.get(field_name) or []
     unique = {str(value).strip() for value in values if str(value).strip()}
     return sorted(unique, key=_option_sort_key)
+
+
+def _filtered_route_options(values: list[str]) -> tuple[list[str], list[str]]:
+    routes = sorted(
+        {value.upper() for value in values if is_route_like(value)},
+        key=_option_sort_key,
+    )
+    dropped_count = len({value for value in values if value}) - len(routes)
+    if dropped_count <= 0:
+        return routes, []
+    return [*routes], [f"Excluded {dropped_count} non-route-like Route option value(s)."]
+
+
+def _ignored_direction_warnings(values: list[str]) -> list[str]:
+    ignored = [value for value in values if value.upper() not in set(DEFAULT_DIRECTIONS)]
+    if not ignored:
+        return []
+    suspicious = [
+        value
+        for value in ignored
+        if audit_value("Direction", value, 1, 0.0).suspicious
+    ]
+    if suspicious:
+        return [
+            "Ignored "
+            f"{len(ignored)} artifact Direction value(s), including "
+            f"{len(suspicious)} suspicious/polluted value(s)."
+        ]
+    return [
+        f"Ignored {len(ignored)} artifact Direction value(s) outside fixed UI directions."
+    ]
+
+
+def _ignored_incident_warnings(values: list[str]) -> list[str]:
+    suspicious = [
+        value
+        for value in values
+        if audit_value("Incident", value, 1, 0.0).suspicious
+    ]
+    if not suspicious:
+        return []
+    return [
+        "Ignored "
+        f"{len(suspicious)} suspicious raw Incident category value(s) in favor of the curated list."
+    ]
 
 
 def _option_sort_key(value: str) -> tuple[int, Any]:
