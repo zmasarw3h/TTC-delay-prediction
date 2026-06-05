@@ -2,7 +2,7 @@
 
 ## Scope
 
-Phase 9 adds a local FastAPI service for the existing calibrated two-output model artifact. Phase 10 adds a thin static frontend served by the same FastAPI app, and Phase 10B adds planner-oriented controls plus model-category and location-matching assistance. It does not train models, run Optuna, compute SHAP values, add weather enrichment, or implement deployment.
+Phase 9 adds a local FastAPI service for the existing calibrated two-output model artifact. Phase 10 adds a thin static frontend served by the same FastAPI app, Phase 10B adds planner-oriented controls plus model-category and location-matching assistance, and Phase 10C repairs the demo around the normalized categorical contract. It does not train models, run Optuna, compute SHAP values, add weather enrichment, or implement deployment.
 
 The default model artifact path is:
 
@@ -50,9 +50,9 @@ Static assets:
 /static/app.js
 ```
 
-The demo loads `/health`, `/model-info`, and `/model-options` on page load, then submits engineered incident-time payloads to `/predict-delay`. It displays expected delay minutes, calibrated `30+` and `60+` minute probabilities, risk bands, binary severe-delay flags, and input notes.
+The demo loads `/health`, `/model-info`, and `/model-options` on page load, then submits engineered incident-time payloads to `/predict-delay`. It displays planner-friendly cards for expected delay minutes, calibrated `30+` and `60+` minute probabilities, risk bands, binary severe-delay flags, and input notes. Selected probability cutoffs are kept under a collapsed model-details section.
 
-Route and incident controls use searchable plain-HTML datalists populated from the model artifact when those categories are available. Mode and direction controls use select menus. Direction and mode have built-in fallback options if artifact extraction is incomplete.
+Mode, direction, and incident controls use controlled normalized options rather than raw artifact categories. Route is a free-text field with optional route-like suggestions only. Location is always a plain text field with no datalist because reported incident locations are high-cardinality.
 
 Location remains free text because reported incident locations are messy. The UI can call `/match-location` to compare the entered location against known model locations:
 
@@ -63,8 +63,8 @@ Location remains free text because reported incident locations are messy. The UI
 
 The UI includes exactly two presets:
 
-- Bus incident: a bus example with reasonable prior-delay feature values and a timestamp so calendar fields are derived by the API.
-- Streetcar incident: a streetcar example with reasonable prior-delay feature values and a timestamp so calendar fields are derived by the API.
+- Bus incident: a bus example with valid normalized category values, reasonable prior-delay feature values, and a timestamp so calendar fields are derived by the API.
+- Streetcar incident: a streetcar example with valid normalized category values, reasonable prior-delay feature values, and a timestamp so calendar fields are derived by the API.
 
 This is a local demo UI only. It still expects engineered incident-time features; raw TTC incident-to-feature lookup and weather enrichment are not implemented.
 
@@ -100,15 +100,50 @@ Returns model metadata:
 
 Returns category options for guided frontend controls:
 
-- modes
-- routes
-- directions
-- incidents
-- locations
+- modes as `{value, label}` objects:
+  - `bus`: Bus
+  - `streetcar`: Streetcar
+- routes as route-like strings only, such as `29`, `501`, `32A`, `504B`, or `RAD`
+- directions as `{value, label}` objects:
+  - `N`: North
+  - `E`: East
+  - `S`: South
+  - `W`: West
+  - `B`: Both / bidirectional
+  - `Unknown`: Unknown
+- incidents as curated normalized `{value, label}` objects
+- locations as an empty list; known normalized locations are used server-side only for `/match-location`
 - warnings for incomplete category extraction
 - counts for each category list
 
-Options are extracted from the calibrated artifact's known categories or model pipeline where feasible. If extraction is incomplete, mode falls back to `bus` and `streetcar`, direction falls back to `N`, `S`, `E`, `W`, `B`, and `Unknown`, and unavailable route, incident, or location lists are returned empty with warnings.
+Direction and incident options are not populated from raw artifact categories, which prevents polluted category values from leaking into the UI. Route options are extracted from the calibrated artifact's known categories where feasible, then filtered through the normalized route contract. If route extraction is incomplete, route suggestions are returned empty and callers can still type a route.
+
+Curated incident values:
+
+```text
+Mechanical
+Utilized Off Route
+General Delay
+Late Leaving Garage
+Investigation
+Operations - Operator
+Operations
+Diversion
+Emergency Services
+Security
+Collision - TTC
+Collision - TTC Involved
+Road Blocked - NON-TTC Collision
+Held By
+Cleaning
+Cleaning - Unsanitary
+Vision
+Overhead
+Overhead - Pantograph
+Rail/Switches
+Other
+Unknown
+```
 
 ### `POST /match-location`
 
@@ -127,6 +162,7 @@ Response:
 ```json
 {
   "original_location": "queen and spadina",
+  "normalized_location": "QUEEN AND SPADINA",
   "matched_location": "Queen Street West and Spadina Avenue",
   "score": 85.0,
   "match_type": "fuzzy",
@@ -136,6 +172,8 @@ Response:
 ```
 
 The frontend decides whether to submit the matched location or the original entered location. The prediction endpoint itself does not force matching.
+
+Invalid or malformed requests return standard FastAPI `422` JSON responses. Normal no-match cases return a successful JSON response with `match_type` set to `none`, `accepted_for_prediction` set to `false`, and a readable warning instead of raising a server error.
 
 ### `POST /predict-delay`
 

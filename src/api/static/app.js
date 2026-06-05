@@ -1,3 +1,42 @@
+const CURATED_INCIDENTS = [
+  "Mechanical",
+  "Utilized Off Route",
+  "General Delay",
+  "Late Leaving Garage",
+  "Investigation",
+  "Operations - Operator",
+  "Operations",
+  "Diversion",
+  "Emergency Services",
+  "Security",
+  "Collision - TTC",
+  "Collision - TTC Involved",
+  "Road Blocked - NON-TTC Collision",
+  "Held By",
+  "Cleaning",
+  "Cleaning - Unsanitary",
+  "Vision",
+  "Overhead",
+  "Overhead - Pantograph",
+  "Rail/Switches",
+  "Other",
+  "Unknown",
+];
+
+const MODE_OPTIONS = [
+  { value: "bus", label: "Bus" },
+  { value: "streetcar", label: "Streetcar" },
+];
+
+const DIRECTION_OPTIONS = [
+  { value: "N", label: "North" },
+  { value: "E", label: "East" },
+  { value: "S", label: "South" },
+  { value: "W", label: "West" },
+  { value: "B", label: "Both / bidirectional" },
+  { value: "Unknown", label: "Unknown" },
+];
+
 const PRESETS = {
   bus: {
     label: "Bus incident",
@@ -69,13 +108,16 @@ const locationStatus = document.querySelector("#location-status");
 const locationInput = document.querySelector("#Location");
 
 let locationMatch = null;
+let incidentValues = new Set(CURATED_INCIDENTS);
+let modeValues = new Set(MODE_OPTIONS.map((option) => option.value));
+let directionValues = new Set(DIRECTION_OPTIONS.map((option) => option.value));
 
 function formatPercent(value) {
   return `${(Number(value) * 100).toFixed(1)}%`;
 }
 
 function formatMinutes(value) {
-  return `${Number(value).toFixed(1)} min`;
+  return `${Number(value).toFixed(1)} minutes`;
 }
 
 function escapeHtml(value) {
@@ -91,22 +133,41 @@ function labelForFlag(value) {
   return Number(value) === 1 ? "Yes" : "No";
 }
 
-function setOptions(selectId, values, fallbackValues = []) {
-  const select = document.getElementById(selectId);
-  if (!select) return;
-  const options = values && values.length ? values : fallbackValues;
-  select.innerHTML = options
-    .map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
-    .join("");
+function normalizeOption(option) {
+  if (typeof option === "string") return { value: option, label: option };
+  return { value: option.value, label: option.label || option.value };
 }
 
-function setDatalist(listId, values) {
-  const list = document.getElementById(listId);
+function setSelectOptions(selectId, options, fallbackOptions = []) {
+  const select = document.getElementById(selectId);
+  if (!select) return [];
+  const normalized = (options && options.length ? options : fallbackOptions).map(normalizeOption);
+  select.innerHTML = normalized
+    .map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`)
+    .join("");
+  return normalized.map((option) => option.value);
+}
+
+function isRouteLike(value) {
+  return /^(\d{1,4}[A-Za-z]{0,2}|RAD)$/.test(String(value).trim());
+}
+
+function setRouteOptions(values) {
+  const list = document.getElementById("route-options");
   if (!list || !values) return;
-  list.innerHTML = values
+  const routeValues = Array.from(new Set(values.map(String).filter(isRouteLike)));
+  list.innerHTML = routeValues
     .slice(0, 1000)
     .map((value) => `<option value="${escapeHtml(value)}"></option>`)
     .join("");
+}
+
+function errorMessage(detail, fallback) {
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item.msg || JSON.stringify(item)).join(" ");
+  }
+  if (typeof detail === "string") return detail;
+  return fallback;
 }
 
 async function loadServiceReadiness() {
@@ -120,22 +181,30 @@ async function loadServiceReadiness() {
     const info = await infoResponse.json();
     const options = await optionsResponse.json();
 
-    if (!healthResponse.ok) throw new Error(health.detail || "Health check failed.");
-    if (!infoResponse.ok) throw new Error(info.detail || "Model metadata failed.");
-    if (!optionsResponse.ok) throw new Error(options.detail || "Model options failed.");
+    if (!healthResponse.ok) throw new Error(errorMessage(health.detail, "Health check failed."));
+    if (!infoResponse.ok) throw new Error(errorMessage(info.detail, "Model metadata failed."));
+    if (!optionsResponse.ok) throw new Error(errorMessage(options.detail, "Model options failed."));
 
-    setOptions("mode", options.modes, ["bus", "streetcar"]);
-    setOptions("Direction", options.directions, ["N", "S", "E", "W", "B", "Unknown"]);
-    setDatalist("route-options", options.routes);
-    setDatalist("incident-options", options.incidents);
-    setDatalist("location-options", options.locations);
+    modeValues = new Set(setSelectOptions("mode", options.modes, MODE_OPTIONS));
+    directionValues = new Set(setSelectOptions("Direction", options.directions, DIRECTION_OPTIONS));
+    const incidentOptions =
+      options.incidents && options.incidents.length
+        ? options.incidents
+        : CURATED_INCIDENTS.map((value) => ({ value, label: value }));
+    incidentValues = new Set(setSelectOptions("Incident", incidentOptions));
+    setRouteOptions(options.routes || []);
 
-    const warningText = options.warnings && options.warnings.length ? ` ${options.warnings.join(" ")}` : "";
-    const artifactText = health.artifact_exists ? "Artifact available." : "Artifact missing.";
-    serviceNote.textContent = `${artifactText} ${info.model_phase || "Model"} options loaded for route, incident, direction, and location guidance.${warningText}`;
+    const artifactText = health.artifact_exists ? "Model artifact available." : "Model artifact missing.";
+    serviceNote.textContent = `${artifactText} Planner-ready category options loaded. Historical feature lookup is not implemented yet.`;
     serviceNote.className = `service-note ${health.artifact_exists ? "ok" : "warn"}`;
     setPreset(activePresetName());
   } catch (error) {
+    setSelectOptions("mode", MODE_OPTIONS);
+    setSelectOptions("Direction", DIRECTION_OPTIONS);
+    setSelectOptions(
+      "Incident",
+      CURATED_INCIDENTS.map((value) => ({ value, label: value })),
+    );
     serviceNote.textContent = `Service readiness unavailable: ${error.message}`;
     serviceNote.className = "service-note warn";
   }
@@ -166,7 +235,50 @@ function setPreset(name) {
   presetButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.preset === name);
   });
+  clearValidationErrors();
   resetLocationMatch("Preset loaded. Match the location or submit to use the entered location.");
+}
+
+function clearValidationErrors() {
+  document.querySelectorAll(".field-error").forEach((element) => {
+    element.textContent = "";
+  });
+}
+
+function setFieldError(fieldName, message) {
+  const error = document.querySelector(`[data-error-for="${fieldName}"]`);
+  if (error) error.textContent = message;
+}
+
+function validateForm() {
+  clearValidationErrors();
+  const errors = {};
+  const requiredFields = {
+    mode: "Choose a mode.",
+    Route: "Enter a route.",
+    Direction: "Choose a direction.",
+    Incident: "Choose an incident type.",
+    Location: "Enter a location.",
+    timestamp: "Choose a timestamp.",
+  };
+
+  for (const [fieldName, message] of Object.entries(requiredFields)) {
+    const value = document.getElementById(fieldName).value.trim();
+    if (!value) errors[fieldName] = message;
+  }
+
+  const mode = document.getElementById("mode").value;
+  const direction = document.getElementById("Direction").value;
+  const incident = document.getElementById("Incident").value;
+  if (mode && !modeValues.has(mode)) errors.mode = "Mode must be Bus or Streetcar.";
+  if (direction && !directionValues.has(direction)) errors.Direction = "Choose a listed direction.";
+  if (incident && !incidentValues.has(incident)) errors.Incident = "Choose a listed incident type.";
+
+  for (const [fieldName, message] of Object.entries(errors)) {
+    setFieldError(fieldName, message);
+  }
+
+  return Object.keys(errors).length === 0;
 }
 
 function buildPayload() {
@@ -203,13 +315,13 @@ async function requestLocationMatch() {
       body: JSON.stringify({ location }),
     });
     const body = await response.json();
-    if (!response.ok) throw new Error(body.detail || "Location matching failed.");
+    if (!response.ok) throw new Error(errorMessage(body.detail, "Location matching failed."));
     renderLocationMatch(body);
     return body;
   } catch (error) {
     locationMatch = null;
     locationStatus.className = "location-status warn";
-    locationStatus.textContent = error.message;
+    locationStatus.textContent = `Location matching unavailable: ${error.message}. Using entered location.`;
     return null;
   }
 }
@@ -226,7 +338,7 @@ function renderLocationMatch(match) {
     locationStatus.className = "location-status suggest";
     locationStatus.innerHTML = `
       Suggested: <strong>${escapeHtml(match.matched_location)}</strong>
-      <button id="accept-location-button" class="inline-button" type="button">Accept suggestion</button>
+      <button id="accept-location-button" class="inline-button" type="button">Use suggestion</button>
     `;
     document.querySelector("#accept-location-button").addEventListener("click", () => {
       locationInput.value = match.matched_location;
@@ -238,7 +350,7 @@ function renderLocationMatch(match) {
   }
 
   locationStatus.className = "location-status warn";
-  locationStatus.textContent = "No confident match; using entered location.";
+  locationStatus.textContent = match.warning || "No confident match; using entered location.";
 }
 
 async function ensureLocationMatch() {
@@ -263,18 +375,14 @@ function resultCard(label, value, extraClass = "") {
 
 function bandMarkup(band) {
   const normalized = String(band || "unknown").toLowerCase();
-  return `<span class="band ${normalized}">${escapeHtml(normalized)}</span>`;
+  const label = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  return `<span class="band ${normalized}">${escapeHtml(label)}</span>`;
 }
 
 function renderWarnings(warnings) {
-  if (!warnings || warnings.length === 0) return "";
-  const items = warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
-  return `
-    <div class="warnings">
-      <h3>Input notes</h3>
-      <ul>${items}</ul>
-    </div>
-  `;
+  const notes = warnings && warnings.length ? warnings : ["No input warnings returned."];
+  const items = notes.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
+  return resultCard("Input notes", `<ul class="note-list">${items}</ul>`);
 }
 
 function renderModelDetails(result) {
@@ -300,14 +408,14 @@ function renderResults(result) {
   resultsEl.innerHTML = `
     <div class="result-grid">
       ${resultCard("Expected delay", formatMinutes(result.predicted_delay_minutes), "primary")}
-      ${resultCard("Chance of 30+ min delay", formatPercent(result.calibrated_severe_delay_probability_30))}
-      ${resultCard("30+ min risk level", bandMarkup(result.risk_band_30))}
-      ${resultCard("Flagged for 30+ min delay?", labelForFlag(result.severe_delay_prediction_30))}
-      ${resultCard("Chance of 60+ min delay", formatPercent(result.calibrated_severe_delay_probability_60))}
-      ${resultCard("60+ min risk level", bandMarkup(result.risk_band_60))}
-      ${resultCard("Flagged for 60+ min delay?", labelForFlag(result.severe_delay_prediction_60))}
+      ${resultCard("Chance of 30+ minute delay", formatPercent(result.calibrated_severe_delay_probability_30))}
+      ${resultCard("30+ minute risk level", bandMarkup(result.risk_band_30))}
+      ${resultCard("30+ minute delay flag", labelForFlag(result.severe_delay_prediction_30))}
+      ${resultCard("Chance of 60+ minute delay", formatPercent(result.calibrated_severe_delay_probability_60))}
+      ${resultCard("60+ minute risk level", bandMarkup(result.risk_band_60))}
+      ${resultCard("60+ minute delay flag", labelForFlag(result.severe_delay_prediction_60))}
+      ${renderWarnings(result.warnings)}
     </div>
-    ${renderWarnings(result.warnings)}
     ${renderModelDetails(result)}
   `;
 }
@@ -324,10 +432,16 @@ function renderError(message) {
 
 async function submitPrediction(event) {
   event.preventDefault();
+  if (!validateForm()) {
+    resultsEl.className = "results-empty";
+    resultsEl.textContent = "Fix the highlighted fields before estimating delay.";
+    return;
+  }
+
   submitButton.disabled = true;
   submitButton.textContent = "Estimating...";
   resultsEl.className = "results-empty";
-  resultsEl.textContent = "Submitting incident-time features...";
+  resultsEl.textContent = "Submitting incident details...";
 
   try {
     await ensureLocationMatch();
@@ -339,7 +453,7 @@ async function submitPrediction(event) {
     const body = await response.json();
 
     if (!response.ok) {
-      throw new Error(body.detail || "Prediction endpoint returned an error.");
+      throw new Error(errorMessage(body.detail, "Prediction endpoint returned an error."));
     }
 
     renderResults(body);
@@ -357,9 +471,13 @@ presetButtons.forEach((button) => {
 
 matchLocationButton.addEventListener("click", requestLocationMatch);
 locationInput.addEventListener("input", () => resetLocationMatch("Location changed. Match again or submit to use it as entered."));
-locationInput.addEventListener("blur", () => {
-  if (locationInput.value.trim()) requestLocationMatch();
-});
 form.addEventListener("submit", submitPrediction);
+
+setSelectOptions("mode", MODE_OPTIONS);
+setSelectOptions("Direction", DIRECTION_OPTIONS);
+setSelectOptions(
+  "Incident",
+  CURATED_INCIDENTS.map((value) => ({ value, label: value })),
+);
 setPreset("bus");
 loadServiceReadiness();

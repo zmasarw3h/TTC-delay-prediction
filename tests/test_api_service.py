@@ -13,6 +13,30 @@ from src.features.build_features import FEATURE_COLUMNS
 
 
 STATIC_DIR = Path(__file__).resolve().parents[1] / "src" / "api" / "static"
+CURATED_INCIDENT_VALUES = [
+    "Mechanical",
+    "Utilized Off Route",
+    "General Delay",
+    "Late Leaving Garage",
+    "Investigation",
+    "Operations - Operator",
+    "Operations",
+    "Diversion",
+    "Emergency Services",
+    "Security",
+    "Collision - TTC",
+    "Collision - TTC Involved",
+    "Road Blocked - NON-TTC Collision",
+    "Held By",
+    "Cleaning",
+    "Cleaning - Unsanitary",
+    "Vision",
+    "Overhead",
+    "Overhead - Pantograph",
+    "Rail/Switches",
+    "Other",
+    "Unknown",
+]
 
 
 class FakeRegressor:
@@ -112,6 +136,10 @@ def valid_payload() -> dict:
     }
 
 
+def option_values(options: list[dict[str, str]]) -> list[str]:
+    return [option["value"] for option in options]
+
+
 def test_root_serves_demo_frontend(client):
     response = client.get("/")
 
@@ -179,15 +207,18 @@ def test_model_options_returns_expected_structure(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["modes"] == ["bus", "streetcar"]
+    assert body["modes"] == [
+        {"value": "bus", "label": "Bus"},
+        {"value": "streetcar", "label": "Streetcar"},
+    ]
     assert body["routes"] == ["29", "501", "32A", "RAD"]
-    assert body["directions"] == ["N", "E", "S", "W", "B"]
-    assert "Mechanical" in body["incidents"]
-    assert "Operations" in body["incidents"]
-    assert "501" not in body["incidents"]
-    assert "DUFFERIN STATION" in body["locations"]
-    assert body["counts"]["locations"] == 2
-    assert "Mechanical delay at station" not in body["directions"]
+    assert option_values(body["directions"]) == ["N", "E", "S", "W", "B", "Unknown"]
+    assert option_values(body["incidents"]) == CURATED_INCIDENT_VALUES
+    assert "501" not in option_values(body["incidents"])
+    assert body["locations"] == []
+    assert body["counts"]["locations"] == 0
+    assert body["counts"]["known_locations_server_side"] == 2
+    assert "Mechanical delay at station" not in option_values(body["directions"])
     assert any("Excluded 1 non-route-like Route" in warning for warning in body["warnings"])
 
 
@@ -196,8 +227,27 @@ def test_model_options_directions_are_fixed_even_with_polluted_artifact(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["directions"] == ["N", "E", "S", "W", "B"]
-    assert "Mechanical delay at station" not in body["directions"]
+    assert option_values(body["directions"]) == ["N", "E", "S", "W", "B", "Unknown"]
+    assert "Mechanical delay at station" not in option_values(body["directions"])
+
+
+def test_model_options_route_options_are_route_like_only(client):
+    response = client.get("/model-options")
+
+    assert response.status_code == 200
+    routes = response.json()["routes"]
+    assert routes == ["29", "501", "32A", "RAD"]
+    assert all(route.isalnum() and len(route) <= 6 for route in routes)
+
+
+def test_model_options_returns_curated_incident_options_only(client):
+    response = client.get("/model-options")
+
+    assert response.status_code == 200
+    incident_values = option_values(response.json()["incidents"])
+    assert incident_values == CURATED_INCIDENT_VALUES
+    assert "501" not in incident_values
+    assert "Mechanical delay at station" not in incident_values
 
 
 def test_match_location_handles_exact_match(client):
@@ -206,6 +256,7 @@ def test_match_location_handles_exact_match(client):
     assert response.status_code == 200
     body = response.json()
     assert body["original_location"] == "dufferin station"
+    assert body["normalized_location"] == "DUFFERIN STATION"
     assert body["matched_location"] == "DUFFERIN STATION"
     assert body["score"] == 100.0
     assert body["match_type"] == "exact"
@@ -236,6 +287,14 @@ def test_match_location_handles_no_match(client):
     assert body["match_type"] == "none"
     assert body["accepted_for_prediction"] is False
     assert "No confident location match" in body["warning"]
+
+
+def test_match_location_malformed_request_returns_422_json(client):
+    response = client.post("/match-location", json={"bad": "request"})
+
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("application/json")
+    assert "detail" in response.json()
 
 
 def test_predict_delay_returns_expected_response_shape(client):

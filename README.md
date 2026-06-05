@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, categorical normalization, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, API-ready input validation utilities, a Phase 9 local FastAPI prediction service, and a Phase 10 FastAPI-served local demo frontend with planner-oriented controls. SHAP is optional and not required for the default explainability workflow.
+The project currently has reproducible data-cleaning, target-diagnostics, categorical normalization, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, API-ready input validation utilities, a Phase 9 local FastAPI prediction service, and a Phase 10 FastAPI-served local demo frontend with repaired planner-oriented controls. SHAP is optional and not required for the default explainability workflow.
 
 ## Project Structure
 
@@ -290,7 +290,7 @@ The demo includes exactly two presets:
 - Bus incident
 - Streetcar incident
 
-The local demo UI includes searchable route and incident controls, mode and direction dropdowns, and location matching against known model locations where available. A high-confidence location match can be submitted automatically; medium-confidence matches are shown as suggestions. The app still expects engineered prior-delay features and does not implement raw TTC incident-to-feature lookup.
+The repaired local demo UI uses clean normalized category controls: mode and direction dropdowns, a curated incident dropdown, route-like route suggestions, and plain-text location entry with optional location matching assistance. A high-confidence location match can be submitted automatically; medium-confidence matches are shown as suggestions. The app still expects engineered prior-delay features and does not implement raw TTC incident-to-feature lookup.
 
 By default, the API loads:
 

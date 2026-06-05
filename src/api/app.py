@@ -9,7 +9,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.options import match_location, model_options_from_categories
+from src.api.options import (
+    location_options_from_categories,
+    match_location,
+    model_options_from_categories,
+)
 from src.api.prediction import CalibratedDelayPredictionService
 from src.api.schemas import (
     DelayPredictionResponse,
@@ -68,8 +72,10 @@ def model_options() -> ModelOptionsResponse:
 @app.post("/match-location", response_model=LocationMatchResponse)
 def match_location_endpoint(payload: LocationMatchRequest) -> LocationMatchResponse:
     try:
-        options = model_options_from_categories(prediction_service.known_categories)
-        match = match_location(payload.location, options["locations"])
+        known_locations = location_options_from_categories(
+            prediction_service.known_categories
+        )
+        match = match_location(payload.location, known_locations)
         return LocationMatchResponse(**match.__dict__)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

@@ -75,10 +75,10 @@ class ModelInfoResponse(BaseModel):
 
 
 class ModelOptionsResponse(BaseModel):
-    modes: list[str]
+    modes: list[dict[str, str]]
     routes: list[str]
-    directions: list[str]
-    incidents: list[str]
+    directions: list[dict[str, str]]
+    incidents: list[dict[str, str]]
     locations: list[str]
     warnings: list[str]
     counts: dict[str, int]
@@ -90,6 +90,7 @@ class LocationMatchRequest(BaseModel):
 
 class LocationMatchResponse(BaseModel):
     original_location: str
+    normalized_location: str
     matched_location: str | None
     score: float
     match_type: str

@@ -9,13 +9,12 @@ from typing import Any, Mapping
 
 from src.data.audit_categories import audit_value, is_route_like
 from src.data.categorical_normalization import (
-    INCIDENT_CATEGORIES,
+    DIRECTION_CATEGORIES,
     OTHER_CATEGORY,
     UNKNOWN_CATEGORY,
     normalize_direction,
     normalize_incident,
     normalize_location,
-    normalize_mode,
     normalize_route,
 )
 
@@ -27,12 +26,44 @@ except ImportError:  # pragma: no cover - fallback is covered in tests.
 
 
 OPTION_FIELDS = ("mode", "Route", "Direction", "Incident", "Location")
-DEFAULT_MODES = ["bus", "streetcar"]
-DEFAULT_DIRECTIONS = ["N", "E", "S", "W", "B"]
+CONTROLLED_MODES = [
+    {"value": "bus", "label": "Bus"},
+    {"value": "streetcar", "label": "Streetcar"},
+]
+CONTROLLED_DIRECTIONS = [
+    {"value": "N", "label": "North"},
+    {"value": "E", "label": "East"},
+    {"value": "S", "label": "South"},
+    {"value": "W", "label": "West"},
+    {"value": "B", "label": "Both / bidirectional"},
+    {"value": UNKNOWN_CATEGORY, "label": UNKNOWN_CATEGORY},
+]
+CURATED_INCIDENT_VALUES = [
+    "Mechanical",
+    "Utilized Off Route",
+    "General Delay",
+    "Late Leaving Garage",
+    "Investigation",
+    "Operations - Operator",
+    "Operations",
+    "Diversion",
+    "Emergency Services",
+    "Security",
+    "Collision - TTC",
+    "Collision - TTC Involved",
+    "Road Blocked - NON-TTC Collision",
+    "Held By",
+    "Cleaning",
+    "Cleaning - Unsanitary",
+    "Vision",
+    "Overhead",
+    "Overhead - Pantograph",
+    "Rail/Switches",
+    OTHER_CATEGORY,
+    UNKNOWN_CATEGORY,
+]
 CURATED_INCIDENTS = [
-    category
-    for category in INCIDENT_CATEGORIES
-    if category not in {UNKNOWN_CATEGORY, OTHER_CATEGORY}
+    {"value": category, "label": category} for category in CURATED_INCIDENT_VALUES
 ]
 HIGH_CONFIDENCE_LOCATION_SCORE = 90.0
 MEDIUM_CONFIDENCE_LOCATION_SCORE = 75.0
@@ -55,6 +86,7 @@ MATCH_STOPWORDS = {"and", "at", "the", "of"}
 @dataclass(frozen=True)
 class LocationMatch:
     original_location: str
+    normalized_location: str
     matched_location: str | None
     score: float
     match_type: str
@@ -65,51 +97,52 @@ class LocationMatch:
 def model_options_from_categories(
     known_categories: Mapping[str, list[str]] | None,
 ) -> dict[str, Any]:
-    """Build frontend category options from known model categories."""
+    """Build controlled frontend category options from known model categories."""
     categories = known_categories or {}
     warnings: list[str] = []
 
-    modes = sorted(
-        {
-            normalize_mode(value)
-            for value in _category_values(categories, "mode")
-            if normalize_mode(value) != UNKNOWN_CATEGORY
-        }
-        or set(DEFAULT_MODES)
-    )
-    directions = DEFAULT_DIRECTIONS
     raw_directions = _category_values(categories, "Direction")
     raw_routes = _category_values(categories, "Route")
     routes, route_warnings = _filtered_route_options(raw_routes)
     raw_incidents = _category_values(categories, "Incident")
-    incidents = CURATED_INCIDENTS.copy()
-    locations = _normalized_location_options(_category_values(categories, "Location"))
     warnings.extend(route_warnings)
     warnings.extend(_ignored_direction_warnings(raw_directions))
     warnings.extend(_ignored_incident_warnings(raw_incidents))
 
-    for field_name, values in [("Route", routes), ("Location", locations)]:
-        if not values:
-            warnings.append(
-                f"{field_name} options were not available from the model artifact."
-            )
+    if not routes:
+        warnings.append("Route options were not available from the model artifact.")
+    known_location_count = len(location_options_from_categories(categories))
+    if known_location_count:
+        warnings.append(
+            "Location options are available server-side for matching but are not "
+            "sent to the frontend because the field is high-cardinality."
+        )
 
     options = {
-        "modes": modes,
+        "modes": CONTROLLED_MODES,
         "routes": routes,
-        "directions": directions,
-        "incidents": incidents,
-        "locations": locations,
+        "directions": CONTROLLED_DIRECTIONS,
+        "incidents": CURATED_INCIDENTS,
+        "locations": [],
         "warnings": warnings,
     }
     options["counts"] = {
-        "modes": len(modes),
+        "modes": len(CONTROLLED_MODES),
         "routes": len(routes),
-        "directions": len(directions),
-        "incidents": len(incidents),
-        "locations": len(locations),
+        "directions": len(CONTROLLED_DIRECTIONS),
+        "incidents": len(CURATED_INCIDENTS),
+        "locations": 0,
+        "known_locations_server_side": known_location_count,
     }
     return options
+
+
+def location_options_from_categories(
+    known_categories: Mapping[str, list[str]] | None,
+) -> list[str]:
+    """Return normalized known locations for server-side matching only."""
+    categories = known_categories or {}
+    return _normalized_location_options(_category_values(categories, "Location"))
 
 
 def match_location(
@@ -118,10 +151,12 @@ def match_location(
 ) -> LocationMatch:
     """Match a free-form location string to a known model location."""
     original = str(location or "").strip()
+    normalized_request_location = normalize_location(original)
     normalized_input = normalize_match_text(original)
     if not normalized_input:
         return LocationMatch(
             original_location=original,
+            normalized_location=normalized_request_location,
             matched_location=None,
             score=0.0,
             match_type="none",
@@ -137,6 +172,7 @@ def match_location(
     if not normalized_locations:
         return LocationMatch(
             original_location=original,
+            normalized_location=normalized_request_location,
             matched_location=None,
             score=0.0,
             match_type="none",
@@ -144,10 +180,11 @@ def match_location(
             accepted_for_prediction=False,
         )
 
-    for known_location, normalized_location in normalized_locations:
-        if normalized_input == normalized_location:
+    for known_location, normalized_known_location in normalized_locations:
+        if normalized_input == normalized_known_location:
             return LocationMatch(
                 original_location=original,
+                normalized_location=normalized_request_location,
                 matched_location=known_location,
                 score=100.0,
                 match_type="exact",
@@ -162,6 +199,7 @@ def match_location(
     if matched_location is None or score < MEDIUM_CONFIDENCE_LOCATION_SCORE:
         return LocationMatch(
             original_location=original,
+            normalized_location=normalized_request_location,
             matched_location=matched_location,
             score=round(score, 1),
             match_type="none",
@@ -175,6 +213,7 @@ def match_location(
     if score >= HIGH_CONFIDENCE_LOCATION_SCORE:
         return LocationMatch(
             original_location=original,
+            normalized_location=normalized_request_location,
             matched_location=matched_location,
             score=round(score, 1),
             match_type="fuzzy",
@@ -184,6 +223,7 @@ def match_location(
 
     return LocationMatch(
         original_location=original,
+        normalized_location=normalized_request_location,
         matched_location=matched_location,
         score=round(score, 1),
         match_type="fuzzy",
@@ -224,7 +264,7 @@ def _ignored_direction_warnings(values: list[str]) -> list[str]:
     ignored = [
         value
         for value in values
-        if normalize_direction(value) not in set(DEFAULT_DIRECTIONS)
+        if normalize_direction(value) not in set(DIRECTION_CATEGORIES)
     ]
     if not ignored:
         return []
@@ -248,7 +288,7 @@ def _ignored_incident_warnings(values: list[str]) -> list[str]:
     suspicious = [
         value
         for value in values
-        if normalize_incident(value) == OTHER_CATEGORY
+        if normalize_incident(value) not in CURATED_INCIDENT_VALUES
         and audit_value("Incident", value, 1, 0.0).suspicious
     ]
     if not suspicious:

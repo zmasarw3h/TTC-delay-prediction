@@ -25,7 +25,7 @@
           <div class="section-heading">
             <div>
               <p class="eyebrow">Incident intake</p>
-              <h2>Planner inputs</h2>
+              <h2>Basic incident details</h2>
             </div>
           </div>
 
@@ -38,36 +38,39 @@
             <label>
               <span>Mode</span>
               <select id="mode" name="mode" required>
-                <option value="bus">bus</option>
-                <option value="streetcar">streetcar</option>
+                <option value="bus">Bus</option>
+                <option value="streetcar">Streetcar</option>
               </select>
+              <div class="field-error" data-error-for="mode"></div>
             </label>
             <label>
               <span>Route</span>
               <input id="Route" name="Route" list="route-options" autocomplete="off" required />
               <datalist id="route-options"></datalist>
+              <div class="field-error" data-error-for="Route"></div>
             </label>
             <label>
               <span>Direction</span>
               <select id="Direction" name="Direction" required>
-                <option value="N">N</option>
-                <option value="S">S</option>
-                <option value="E">E</option>
-                <option value="W">W</option>
-                <option value="B">B</option>
+                <option value="N">North</option>
+                <option value="E">East</option>
+                <option value="S">South</option>
+                <option value="W">West</option>
+                <option value="B">Both / bidirectional</option>
                 <option value="Unknown">Unknown</option>
               </select>
+              <div class="field-error" data-error-for="Direction"></div>
             </label>
             <label>
               <span>Incident type</span>
-              <input id="Incident" name="Incident" list="incident-options" autocomplete="off" required />
-              <datalist id="incident-options"></datalist>
+              <select id="Incident" name="Incident" required></select>
+              <div class="field-error" data-error-for="Incident"></div>
             </label>
             <div class="wide location-control">
               <label>
                 <span>Location</span>
-                <input id="Location" name="Location" list="location-options" autocomplete="off" required />
-                <datalist id="location-options"></datalist>
+                <input id="Location" name="Location" autocomplete="off" required />
+                <div class="field-error" data-error-for="Location"></div>
               </label>
               <button id="match-location-button" class="secondary-button" type="button">Match location</button>
               <div id="location-status" class="location-status muted" aria-live="polite">
@@ -77,11 +80,12 @@
             <label>
               <span>Timestamp</span>
               <input id="timestamp" name="timestamp" type="datetime-local" required />
+              <div class="field-error" data-error-for="timestamp"></div>
             </label>
           </div>
 
           <details class="advanced">
-            <summary>Advanced historical features</summary>
+            <summary>Historical context features</summary>
             <p class="helper">
               Historical features are normally computed from prior TTC incident records before prediction time.
             </p>
@@ -130,7 +134,7 @@
           <div class="section-heading">
             <div>
               <p class="eyebrow">Operations outlook</p>
-              <h2 id="results-title">Planning result</h2>
+              <h2 id="results-title">Prediction results</h2>
             </div>
           </div>
           <div id="results" class="results-empty" aria-live="polite">
