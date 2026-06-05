@@ -3,38 +3,29 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TTC Delay Prediction Demo</title>
+    <title>TTC Delay Planning Demo</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
     <header class="site-header">
       <div>
         <p class="eyebrow">Local FastAPI demo</p>
-        <h1>TTC Delay Prediction</h1>
+        <h1>TTC Delay Planning</h1>
         <p class="subtitle">Incident-time TTC delay prediction demo</p>
       </div>
     </header>
 
     <main class="layout">
-      <section class="panel status-panel" aria-labelledby="status-title">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Model status</p>
-            <h2 id="status-title">Calibrated two-output service</h2>
-          </div>
-          <span id="artifact-pill" class="pill muted">Checking</span>
-        </div>
-        <div id="model-status" class="status-grid" aria-live="polite">
-          <div class="skeleton">Loading model status...</div>
-        </div>
+      <section id="service-note" class="service-note" aria-live="polite">
+        Loading service readiness and model option lists...
       </section>
 
       <section class="workspace">
         <form id="prediction-form" class="panel form-panel">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Inputs</p>
-              <h2>Incident details</h2>
+              <p class="eyebrow">Incident intake</p>
+              <h2>Planner inputs</h2>
             </div>
           </div>
 
@@ -53,38 +44,54 @@
             </label>
             <label>
               <span>Route</span>
-              <input id="Route" name="Route" autocomplete="off" required />
+              <input id="Route" name="Route" list="route-options" autocomplete="off" required />
+              <datalist id="route-options"></datalist>
             </label>
             <label>
               <span>Direction</span>
-              <input id="Direction" name="Direction" autocomplete="off" required />
+              <select id="Direction" name="Direction" required>
+                <option value="N">N</option>
+                <option value="S">S</option>
+                <option value="E">E</option>
+                <option value="W">W</option>
+                <option value="B">B</option>
+                <option value="Unknown">Unknown</option>
+              </select>
             </label>
             <label>
-              <span>Incident</span>
-              <input id="Incident" name="Incident" autocomplete="off" required />
+              <span>Incident type</span>
+              <input id="Incident" name="Incident" list="incident-options" autocomplete="off" required />
+              <datalist id="incident-options"></datalist>
             </label>
-            <label class="wide">
-              <span>Location</span>
-              <input id="Location" name="Location" autocomplete="off" required />
-            </label>
+            <div class="wide location-control">
+              <label>
+                <span>Location</span>
+                <input id="Location" name="Location" list="location-options" autocomplete="off" required />
+                <datalist id="location-options"></datalist>
+              </label>
+              <button id="match-location-button" class="secondary-button" type="button">Match location</button>
+              <div id="location-status" class="location-status muted" aria-live="polite">
+                Enter a reported location, then match it to a known model location when possible.
+              </div>
+            </div>
             <label>
               <span>Timestamp</span>
               <input id="timestamp" name="timestamp" type="datetime-local" required />
             </label>
           </div>
 
-          <details class="advanced" open>
+          <details class="advanced">
             <summary>Advanced historical features</summary>
             <p class="helper">
-              These are normally computed from prior TTC incident records before prediction time.
+              Historical features are normally computed from prior TTC incident records before prediction time.
             </p>
             <div class="form-grid numeric-grid">
               <label>
-                <span>prior_route_mean_delay</span>
+                <span>Prior route average delay</span>
                 <input id="prior_route_mean_delay" name="prior_route_mean_delay" type="number" step="0.1" />
               </label>
               <label>
-                <span>prior_route_hour_mean_delay</span>
+                <span>Prior route-hour average delay</span>
                 <input
                   id="prior_route_hour_mean_delay"
                   name="prior_route_hour_mean_delay"
@@ -93,19 +100,19 @@
                 />
               </label>
               <label>
-                <span>prior_incident_mean_delay</span>
+                <span>Prior incident-type average delay</span>
                 <input id="prior_incident_mean_delay" name="prior_incident_mean_delay" type="number" step="0.1" />
               </label>
               <label>
-                <span>prior_mode_mean_delay</span>
+                <span>Prior mode average delay</span>
                 <input id="prior_mode_mean_delay" name="prior_mode_mean_delay" type="number" step="0.1" />
               </label>
               <label>
-                <span>prior_global_mean_delay</span>
+                <span>Prior systemwide average delay</span>
                 <input id="prior_global_mean_delay" name="prior_global_mean_delay" type="number" step="0.1" />
               </label>
               <label>
-                <span>prior_route_hour_7d_mean_delay</span>
+                <span>Prior 7-day route-hour average delay</span>
                 <input
                   id="prior_route_hour_7d_mean_delay"
                   name="prior_route_hour_7d_mean_delay"
@@ -116,18 +123,18 @@
             </div>
           </details>
 
-          <button id="submit-button" class="submit-button" type="submit">Predict delay</button>
+          <button id="submit-button" class="submit-button" type="submit">Estimate delay</button>
         </form>
 
         <section class="panel results-panel" aria-labelledby="results-title">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Prediction</p>
-              <h2 id="results-title">Results</h2>
+              <p class="eyebrow">Operations outlook</p>
+              <h2 id="results-title">Planning result</h2>
             </div>
           </div>
           <div id="results" class="results-empty" aria-live="polite">
-            Submit an incident payload to view calibrated delay and risk outputs.
+            Submit an incident intake to view expected delay and severe-delay risk.
           </div>
         </section>
       </section>

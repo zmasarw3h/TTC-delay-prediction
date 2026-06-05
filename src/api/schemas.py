@@ -74,6 +74,29 @@ class ModelInfoResponse(BaseModel):
     notes_limitations: list[str] = Field(default_factory=list)
 
 
+class ModelOptionsResponse(BaseModel):
+    modes: list[str]
+    routes: list[str]
+    directions: list[str]
+    incidents: list[str]
+    locations: list[str]
+    warnings: list[str]
+    counts: dict[str, int]
+
+
+class LocationMatchRequest(BaseModel):
+    location: str
+
+
+class LocationMatchResponse(BaseModel):
+    original_location: str
+    matched_location: str | None
+    score: float
+    match_type: str
+    warning: str | None
+    accepted_for_prediction: bool
+
+
 class DelayPredictionResponse(BaseModel):
     predicted_delay_minutes: float
     calibrated_severe_delay_probability_30: float

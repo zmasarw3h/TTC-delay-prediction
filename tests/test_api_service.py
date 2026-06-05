@@ -64,10 +64,13 @@ def fake_artifact_path(tmp_path):
         },
         "known_categories": {
             "mode": ["bus", "streetcar"],
-            "Route": ["29"],
-            "Direction": ["N", "S"],
-            "Incident": ["Mechanical"],
-            "Location": ["Dufferin Station"],
+            "Route": ["29", "501"],
+            "Direction": ["N", "S", "E"],
+            "Incident": ["Mechanical", "Operations"],
+            "Location": [
+                "Dufferin Station",
+                "Queen Street West and Spadina Avenue",
+            ],
         },
         "metadata": {"notes": ["Fake artifact for API unit tests."]},
     }
@@ -115,6 +118,8 @@ def test_root_serves_demo_frontend(client):
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Incident-time TTC delay prediction demo" in response.text
+    assert "Model status" not in response.text
+    assert "Calibrated two-output service" not in response.text
     assert response.text.count('data-preset="') == 2
     assert 'data-preset="bus"' in response.text
     assert 'data-preset="streetcar"' in response.text
@@ -167,6 +172,58 @@ def test_model_info_works(client):
     assert body["risk_thresholds"] == [30, 60]
     assert body["selected_calibration_methods"]["30"]["calibration_method"] == "sigmoid"
     assert "raw TTC incident records" in " ".join(body["notes_limitations"])
+
+
+def test_model_options_returns_expected_structure(client):
+    response = client.get("/model-options")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["modes"] == ["bus", "streetcar"]
+    assert body["routes"] == ["29", "501"]
+    assert body["directions"] == ["E", "N", "S"]
+    assert body["incidents"] == ["Mechanical", "Operations"]
+    assert "Dufferin Station" in body["locations"]
+    assert body["counts"]["locations"] == 2
+    assert body["warnings"] == []
+
+
+def test_match_location_handles_exact_match(client):
+    response = client.post("/match-location", json={"location": "dufferin station"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["original_location"] == "dufferin station"
+    assert body["matched_location"] == "Dufferin Station"
+    assert body["score"] == 100.0
+    assert body["match_type"] == "exact"
+    assert body["accepted_for_prediction"] is True
+    assert body["warning"] is None
+
+
+def test_match_location_handles_fuzzy_or_contains_match(client):
+    response = client.post("/match-location", json={"location": "queen and spadina"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["matched_location"] == "Queen Street West and Spadina Avenue"
+    assert body["score"] >= 75.0
+    assert body["match_type"] == "fuzzy"
+    if body["score"] >= 90.0:
+        assert body["accepted_for_prediction"] is True
+    else:
+        assert body["accepted_for_prediction"] is False
+        assert "Possible location match" in body["warning"]
+
+
+def test_match_location_handles_no_match(client):
+    response = client.post("/match-location", json={"location": "Mars Base"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["match_type"] == "none"
+    assert body["accepted_for_prediction"] is False
+    assert "No confident location match" in body["warning"]
 
 
 def test_predict_delay_returns_expected_response_shape(client):

@@ -2,7 +2,7 @@
 
 ## Scope
 
-Phase 9 adds a local FastAPI service for the existing calibrated two-output model artifact. Phase 10 adds a thin static frontend served by the same FastAPI app. It does not train models, run Optuna, compute SHAP values, add weather enrichment, or implement deployment.
+Phase 9 adds a local FastAPI service for the existing calibrated two-output model artifact. Phase 10 adds a thin static frontend served by the same FastAPI app, and Phase 10B adds planner-oriented controls plus model-category and location-matching assistance. It does not train models, run Optuna, compute SHAP values, add weather enrichment, or implement deployment.
 
 The default model artifact path is:
 
@@ -50,7 +50,16 @@ Static assets:
 /static/app.js
 ```
 
-The demo fetches `/health` and `/model-info` on page load, then submits engineered incident-time payloads to `/predict-delay`. It displays expected delay minutes, calibrated `30+` and `60+` minute probabilities, risk bands, binary severe-delay flags, and API warnings.
+The demo loads `/health`, `/model-info`, and `/model-options` on page load, then submits engineered incident-time payloads to `/predict-delay`. It displays expected delay minutes, calibrated `30+` and `60+` minute probabilities, risk bands, binary severe-delay flags, and input notes.
+
+Route and incident controls use searchable plain-HTML datalists populated from the model artifact when those categories are available. Mode and direction controls use select menus. Direction and mode have built-in fallback options if artifact extraction is incomplete.
+
+Location remains free text because reported incident locations are messy. The UI can call `/match-location` to compare the entered location against known model locations:
+
+- exact normalized matches are accepted automatically
+- fuzzy matches with score `>= 90` are accepted automatically
+- fuzzy matches with score from `75` to `< 90` are shown as suggestions that the user can accept
+- lower-confidence matches are not accepted, but the user can still submit the original location with a warning
 
 The UI includes exactly two presets:
 
@@ -86,6 +95,47 @@ Returns model metadata:
 - selected operating cutoffs
 - risk band definitions
 - notes and limitations
+
+### `GET /model-options`
+
+Returns category options for guided frontend controls:
+
+- modes
+- routes
+- directions
+- incidents
+- locations
+- warnings for incomplete category extraction
+- counts for each category list
+
+Options are extracted from the calibrated artifact's known categories or model pipeline where feasible. If extraction is incomplete, mode falls back to `bus` and `streetcar`, direction falls back to `N`, `S`, `E`, `W`, `B`, and `Unknown`, and unavailable route, incident, or location lists are returned empty with warnings.
+
+### `POST /match-location`
+
+Matches a free-form location string to known model locations without changing `/predict-delay` behavior.
+
+Request:
+
+```json
+{
+  "location": "queen and spadina"
+}
+```
+
+Response:
+
+```json
+{
+  "original_location": "queen and spadina",
+  "matched_location": "Queen Street West and Spadina Avenue",
+  "score": 85.0,
+  "match_type": "fuzzy",
+  "warning": "Possible location match found; review and accept it before prediction.",
+  "accepted_for_prediction": false
+}
+```
+
+The frontend decides whether to submit the matched location or the original entered location. The prediction endpoint itself does not force matching.
 
 ### `POST /predict-delay`
 

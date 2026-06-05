@@ -9,12 +9,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.api.options import match_location, model_options_from_categories
 from src.api.prediction import CalibratedDelayPredictionService
 from src.api.schemas import (
     DelayPredictionResponse,
     EngineeredIncidentFeatures,
     HealthResponse,
+    LocationMatchRequest,
+    LocationMatchResponse,
     ModelInfoResponse,
+    ModelOptionsResponse,
 )
 
 
@@ -48,6 +52,25 @@ def health() -> HealthResponse:
 def model_info() -> ModelInfoResponse:
     try:
         return ModelInfoResponse(**prediction_service.model_info())
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/model-options", response_model=ModelOptionsResponse)
+def model_options() -> ModelOptionsResponse:
+    try:
+        options = model_options_from_categories(prediction_service.known_categories)
+        return ModelOptionsResponse(**options)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/match-location", response_model=LocationMatchResponse)
+def match_location_endpoint(payload: LocationMatchRequest) -> LocationMatchResponse:
+    try:
+        options = model_options_from_categories(prediction_service.known_categories)
+        match = match_location(payload.location, options["locations"])
+        return LocationMatchResponse(**match.__dict__)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
