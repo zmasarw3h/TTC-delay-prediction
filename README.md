@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, categorical normalization, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, API-ready input validation utilities, a Phase 9 local FastAPI prediction service, and a Phase 10 FastAPI-served local demo frontend with repaired planner-oriented controls. SHAP is optional and not required for the default explainability workflow.
+The project currently has reproducible data-cleaning, target-diagnostics, categorical normalization, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, Phase 11A model-improvement EDA for planning feature engineering v2, API-ready input validation utilities, a Phase 9 local FastAPI prediction service, and a Phase 10 FastAPI-served local demo frontend with repaired planner-oriented controls. SHAP is optional and not required for the default explainability workflow.
 
 ## Project Structure
 
@@ -152,6 +152,22 @@ python3 -m src.models.analyze_errors \
 ```
 
 This writes generated error-analysis reports under `reports/error_analysis/`. The command scores the existing model artifact only; it does not train or modify the model.
+
+## Model Improvement EDA
+
+Run Phase 11A model-improvement EDA to plan feature engineering v2 candidates from the existing normalized splits and generated prediction/error reports:
+
+```bash
+python3 -m src.analysis.model_improvement_eda \
+  --modeling-dir data/processed/modeling \
+  --error-analysis-dir reports/error_analysis \
+  --calibration-dir reports/calibration \
+  --output-dir reports/model_improvement_eda \
+  --min-group-size 100 \
+  --top-n 50
+```
+
+This writes grouped error diagnostics, severe-delay concentration reports, candidate historical support checks, rolling-window opportunity scores, and ranked feature recommendations under `reports/model_improvement_eda/`. The command does not train models, tune hyperparameters, change feature engineering, or modify model artifacts.
 
 ## Model Improvement Experiments
 
@@ -363,6 +379,7 @@ API-ready validation helpers live in `src/api/input_validation.py`. They normali
 - [Modeling baselines](docs/modeling_baselines.md)
 - [Model training](docs/model_training.md)
 - [Model error analysis](docs/error_analysis.md)
+- [Model improvement EDA](docs/model_improvement_eda.md)
 - [Model improvement experiments](docs/model_experiments.md)
 - [Two-output delay and risk model](docs/two_output_model.md)
 - [Probability calibration](docs/probability_calibration.md)

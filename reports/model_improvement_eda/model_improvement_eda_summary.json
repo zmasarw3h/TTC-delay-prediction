@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-06-06T15:33:30.943437+00:00",
+  "note": "Phase 11A EDA only; no model training or artifact modification is performed.",
+  "modeling_dir": "data/processed/modeling",
+  "error_analysis_dir": "reports/error_analysis",
+  "calibration_dir": "reports/calibration",
+  "output_dir": "reports/model_improvement_eda",
+  "min_group_size": 100,
+  "top_n": 50,
+  "validation_rows": 70063,
+  "test_rows": 73134,
+  "recommended_feature_count": 9,
+  "top_recommended_features": [
+    "prior_route_incident_mean_delay",
+    "prior_mode_incident_mean_delay",
+    "prior_route_direction_mean_delay",
+    "prior_route_incident_count",
+    "prior_route_30d_mean_delay",
+    "prior_incident_30d_mean_delay",
+    "prior_route_30d_severe_rate_30",
+    "prior_incident_30d_severe_rate_30",
+    "prior_location_mean_delay"
+  ],
+  "outputs": [
+    "error_by_group.csv",
+    "error_contribution_by_group.csv",
+    "severe_delay_by_group.csv",
+    "candidate_group_support.csv",
+    "candidate_prior_mean_scores.csv",
+    "rolling_window_opportunity.csv",
+    "feature_recommendations.csv",
+    "model_improvement_eda_summary.json",
+    "model_improvement_eda.md"
+  ]
+}

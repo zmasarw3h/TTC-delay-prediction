@@ -1,0 +1,8 @@
+feature_name,feature_type,grouping,target,coverage_percent,missing_fallback_rate,note,mae_where_available,brier_score_where_available
+prior_route_30d_mean_delay,rolling_mean,Route,regression,99.74859808515542,0.25140191484458474,30-day strict prior-only rolling estimate,9.463542228007524,
+prior_incident_30d_mean_delay,rolling_mean,Incident,regression,99.99860332269532,0.0013966773046921374,30-day strict prior-only rolling estimate,9.396856708353287,
+prior_route_hour_30d_mean_delay,rolling_mean,Route + hour,regression,83.55063304398836,16.449366956011648,30-day strict prior-only rolling estimate,10.123804795658053,
+prior_route_30d_severe_rate_30,rolling_rate,Route,severe_30,99.74859808515542,0.25140191484458474,30-day strict prior-only rolling estimate,,0.08137164488310782
+prior_incident_30d_severe_rate_30,rolling_rate,Incident,severe_30,99.99860332269532,0.0013966773046921374,30-day strict prior-only rolling estimate,,0.07386232091544058
+prior_route_30d_severe_rate_60,rolling_rate,Route,severe_60,99.74859808515542,0.25140191484458474,30-day strict prior-only rolling estimate,,0.031675856865517875
+prior_incident_30d_severe_rate_60,rolling_rate,Incident,severe_60,99.99860332269532,0.0013966773046921374,30-day strict prior-only rolling estimate,,0.022713354804411966

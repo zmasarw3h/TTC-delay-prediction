@@ -1,0 +1,7 @@
+feature_name,grouping,row_count,coverage_percent,mae_where_available,fallback_mae,note
+prior_route_incident_mean_delay,Route + Incident,143197,99.83449373939398,8.128664097182984,8.13736042734524,strict prior-only expanding mean
+prior_mode_incident_mean_delay,mode + Incident,143197,100.0,9.291717191508408,9.291717191508408,strict prior-only expanding mean
+prior_route_direction_mean_delay,Route + Direction,143197,99.94203789185528,8.519582802712215,8.522025583991082,strict prior-only expanding mean
+prior_location_mean_delay,Location,143197,92.46981431175234,10.144188657171279,10.129558284259385,strict prior-only expanding mean
+prior_location_incident_mean_delay,Location + Incident,143197,82.87952959908378,8.866198133503678,9.165099151578744,strict prior-only expanding mean
+prior_route_incident_hour_mean_delay,Route + Incident + hour,143197,95.9391607366076,8.259054796538784,8.339722072463518,strict prior-only expanding mean
