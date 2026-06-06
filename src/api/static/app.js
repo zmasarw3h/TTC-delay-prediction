@@ -42,29 +42,38 @@ const DIRECTION_OPTIONS = [
   { value: "Unknown", label: "Unknown" },
 ];
 
-const FIELD_NAMES = [
+const BASIC_FIELD_NAMES = [
   "mode",
   "Route",
   "Direction",
   "Incident",
   "Location",
   "timestamp",
-  "prior_route_mean_delay",
-  "prior_route_hour_mean_delay",
-  "prior_incident_mean_delay",
-  "prior_mode_mean_delay",
-  "prior_global_mean_delay",
-  "prior_route_hour_7d_mean_delay",
 ];
 
-const NUMERIC_FIELDS = new Set([
+const HISTORICAL_FIELD_NAMES = [
   "prior_route_mean_delay",
   "prior_route_hour_mean_delay",
   "prior_incident_mean_delay",
   "prior_mode_mean_delay",
   "prior_global_mean_delay",
   "prior_route_hour_7d_mean_delay",
-]);
+  "prior_route_incident_mean_delay",
+  "prior_mode_incident_mean_delay",
+  "prior_route_direction_mean_delay",
+  "prior_route_incident_count",
+  "prior_route_30d_mean_delay",
+  "prior_incident_30d_mean_delay",
+  "prior_route_30d_severe_rate_30",
+  "prior_incident_30d_severe_rate_30",
+  "prior_route_30d_severe_rate_60",
+  "prior_incident_30d_severe_rate_60",
+  "prior_location_mean_delay",
+  "prior_location_count",
+];
+
+const FIELD_NAMES = [...BASIC_FIELD_NAMES, ...HISTORICAL_FIELD_NAMES];
+const NUMERIC_FIELDS = new Set(HISTORICAL_FIELD_NAMES);
 
 const serviceNote = document.querySelector("#service-note");
 const form = document.querySelector("#prediction-form");
@@ -77,6 +86,7 @@ const modeInput = document.querySelector("#mode");
 const locationStatus = document.querySelector("#location-status");
 const locationInput = document.querySelector("#Location");
 const locationMenu = document.querySelector("#location-menu");
+const historicalOverrideToggle = document.querySelector("#use-historical-overrides");
 
 let routeOptions = [];
 let routeStopDataAvailable = false;
@@ -158,6 +168,14 @@ function setMode(mode) {
   });
 }
 
+function setHistoricalOverrideState() {
+  const enabled = Boolean(historicalOverrideToggle?.checked);
+  HISTORICAL_FIELD_NAMES.forEach((fieldName) => {
+    const input = document.getElementById(fieldName);
+    if (input) input.disabled = !enabled;
+  });
+}
+
 function routeMatchesMode(option) {
   return !option.mode || !modeInput.value || option.mode === modeInput.value;
 }
@@ -210,21 +228,24 @@ function renderLocationMenu() {
 
 async function loadServiceReadiness() {
   try {
-    const [healthResponse, infoResponse, optionsResponse, routeOptionsResponse] = await Promise.all([
+    const [healthResponse, infoResponse, optionsResponse, routeOptionsResponse, historicalResponse] = await Promise.all([
       fetch("/health"),
       fetch("/model-info"),
       fetch("/model-options"),
       fetch("/route-options"),
+      fetch("/historical-lookup-info"),
     ]);
     const health = await healthResponse.json();
     const info = await infoResponse.json();
     const options = await optionsResponse.json();
     const routePayload = await routeOptionsResponse.json();
+    const historical = await historicalResponse.json();
 
     if (!healthResponse.ok) throw new Error(errorMessage(health.detail, "Health check failed."));
     if (!infoResponse.ok) throw new Error(errorMessage(info.detail, "Model metadata failed."));
     if (!optionsResponse.ok) throw new Error(errorMessage(options.detail, "Model options failed."));
     if (!routeOptionsResponse.ok) throw new Error(errorMessage(routePayload.detail, "Route options failed."));
+    if (!historicalResponse.ok) throw new Error(errorMessage(historical.detail, "Historical lookup info failed."));
 
     modeValues = new Set((options.modes || MODE_OPTIONS).map((option) => normalizeOption(option).value));
     setDirectionOptions(options.directions || DIRECTION_OPTIONS);
@@ -244,8 +265,13 @@ async function loadServiceReadiness() {
     const routeText = routeStopDataAvailable
       ? "Route-stop validation loaded."
       : `Route-stop validation unavailable: ${routePayload.warning || "GTFS data missing."}`;
-    serviceNote.textContent = `${artifactText} ${routeText} Historical feature lookup is not implemented yet.`;
-    serviceNote.className = `service-note ${health.artifact_exists && routeStopDataAvailable ? "ok" : "warn"}`;
+    const historicalText = historical.loadable
+      ? `Historical lookup available (${historical.min_timestamp || "unknown"} to ${historical.max_timestamp || "unknown"}), using prior records only.`
+      : "Historical lookup unavailable.";
+    serviceNote.textContent = `${artifactText} ${routeText} ${historicalText}`;
+    serviceNote.className = `service-note ${
+      health.artifact_exists && routeStopDataAvailable && historical.loadable ? "ok" : "warn"
+    }`;
   } catch (error) {
     setSelectOptions("Direction", DIRECTION_OPTIONS);
     setSelectOptions(
@@ -444,7 +470,8 @@ async function requestRouteLocationValidation() {
 
 function buildPayload() {
   const payload = {};
-  for (const fieldName of FIELD_NAMES) {
+  const fieldsToSubmit = historicalOverrideToggle?.checked ? FIELD_NAMES : BASIC_FIELD_NAMES;
+  for (const fieldName of fieldsToSubmit) {
     const input = document.getElementById(fieldName);
     if (!input) continue;
 
@@ -648,6 +675,7 @@ modeButtons.forEach((button) => {
 });
 
 form.addEventListener("submit", submitPrediction);
+historicalOverrideToggle?.addEventListener("change", setHistoricalOverrideState);
 
 setDirectionOptions(DIRECTION_OPTIONS);
 setSelectOptions(
@@ -655,5 +683,6 @@ setSelectOptions(
   CURATED_INCIDENTS.map((value) => ({ value, label: value })),
 );
 setMode("bus");
+setHistoricalOverrideState();
 resetRouteLocationState();
 void loadServiceReadiness();

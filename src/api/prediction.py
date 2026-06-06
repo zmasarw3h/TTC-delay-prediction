@@ -12,16 +12,17 @@ import numpy as np
 import pandas as pd
 
 from src.api.feature_derivation import TIME_FEATURE_FIELDS, derive_time_features
+from src.api.historical_lookup import HistoricalFeatureLookup
 from src.api.input_validation import validate_model_features
 from src.features.build_features import HISTORICAL_FEATURES
 
 
 DEFAULT_MODEL_ARTIFACT_PATH = Path("artifacts/calibration/calibrated_two_output_model.joblib")
 API_LIMITATION_NOTES = [
-    "The API expects engineered incident-time model features, not raw TTC incident records.",
-    "Historical prior-delay features must be computed from records before the prediction moment.",
-    "Raw incident-to-feature lookup and weather enrichment are not implemented in this service.",
-    "Missing historical features may be imputed by the model pipeline, but reliability may be reduced.",
+    "The API accepts basic incident details and computes local historical features when timestamp is provided.",
+    "Historical prior-delay features are computed from records before the prediction moment.",
+    "Weather enrichment is not implemented in this service.",
+    "Missing historical features may still be imputed by the model pipeline, but reliability may be reduced.",
 ]
 
 
@@ -44,12 +45,17 @@ class PredictionResult:
 class CalibratedDelayPredictionService:
     """Load and score the calibrated two-output model artifact."""
 
-    def __init__(self, artifact_path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        artifact_path: str | Path | None = None,
+        historical_lookup: HistoricalFeatureLookup | None = None,
+    ) -> None:
         self.artifact_path = Path(
             artifact_path
             or os.environ.get("TTC_MODEL_ARTIFACT_PATH")
             or DEFAULT_MODEL_ARTIFACT_PATH
         )
+        self.historical_lookup = historical_lookup or HistoricalFeatureLookup()
         self._artifact: dict[str, Any] | None = None
 
     @property
@@ -128,7 +134,9 @@ class CalibratedDelayPredictionService:
         return sorted(int(threshold) for threshold in cutoffs.keys())
 
     def predict(self, payload: Mapping[str, Any]) -> PredictionResult:
-        payload_with_time, warnings = _derive_time_fields(payload)
+        payload_with_history, history_warnings = self._enrich_historical_features(payload)
+        payload_with_time, warnings = _derive_time_fields(payload_with_history, self.feature_columns)
+        warnings = history_warnings + warnings
         validation = validate_model_features(
             payload_with_time,
             self.feature_columns,
@@ -162,6 +170,12 @@ class CalibratedDelayPredictionService:
             model_phase=self.model_phase,
         )
 
+    def compute_historical_features(self, payload: Mapping[str, Any]):
+        return self.historical_lookup.compute(payload)
+
+    def historical_lookup_info(self) -> dict[str, Any]:
+        return self.historical_lookup.info()
+
     def _predict_threshold_probability(self, threshold: int, frame: pd.DataFrame) -> float:
         classifiers = self.artifact.get("calibrated_risk_classifiers", {})
         classifier = classifiers.get(threshold) or classifiers.get(str(threshold))
@@ -186,14 +200,56 @@ class CalibratedDelayPredictionService:
             }
         return _extract_known_categories(self.artifact.get("expected_delay_regressor"))
 
+    def _enrich_historical_features(self, payload: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        enriched = dict(payload)
+        feature_columns = set(self.feature_columns)
+        model_historical_features = [
+            feature for feature in HISTORICAL_FEATURES if feature in feature_columns
+        ]
+        missing_historical = [
+            feature for feature in model_historical_features if enriched.get(feature) is None
+        ]
+        supplied_historical = [
+            feature for feature in model_historical_features if enriched.get(feature) is not None
+        ]
+        warnings = [
+            f"Using caller-provided historical feature override: {feature}."
+            for feature in supplied_historical
+        ]
 
-def _derive_time_fields(payload: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        if not missing_historical:
+            return enriched, warnings
+
+        if enriched.get("timestamp") is None:
+            required_time_features = [field for field in TIME_FEATURE_FIELDS if field in feature_columns]
+            missing_time = [field for field in required_time_features if enriched.get(field) is None]
+            detail = " Missing time feature(s): " + ", ".join(missing_time) + "." if missing_time else ""
+            raise ValueError(
+                "timestamp is required when historical or time features are missing. "
+                "Provide timestamp, or provide all required time and historical model features manually."
+                + detail
+            )
+
+        lookup_result = self.historical_lookup.compute(enriched)
+        for feature in missing_historical:
+            enriched[feature] = lookup_result.features.get(feature)
+        warnings.extend(lookup_result.warnings)
+        return enriched, warnings
+
+
+def _derive_time_fields(
+    payload: Mapping[str, Any],
+    feature_columns: list[str] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     enriched = dict(payload)
     warnings: list[str] = []
+    required_time_fields = TIME_FEATURE_FIELDS
+    if feature_columns is not None:
+        required_time_fields = [field for field in TIME_FEATURE_FIELDS if field in set(feature_columns)]
     timestamp = enriched.get("timestamp")
     if timestamp is not None:
         derived = derive_time_features(timestamp)
-        missing_time_fields = [field for field in TIME_FEATURE_FIELDS if enriched.get(field) is None]
+        missing_time_fields = [field for field in required_time_fields if enriched.get(field) is None]
         for field in missing_time_fields:
             enriched[field] = derived[field]
         if missing_time_fields:
@@ -204,9 +260,16 @@ def _derive_time_fields(payload: Mapping[str, Any]) -> tuple[dict[str, Any], lis
             warnings.append("Derived is_holiday from timestamp.")
         else:
             warnings.append("is_holiday was provided by caller and was not overwritten.")
-    elif enriched.get("is_holiday") is None:
-        enriched["is_holiday"] = 0
-        warnings.append("is_holiday was missing and set to 0 because no timestamp was provided.")
+    else:
+        missing_time_fields = [field for field in required_time_fields if enriched.get(field) is None]
+        if missing_time_fields:
+            raise ValueError(
+                "timestamp is required when time features are missing. "
+                "Provide timestamp, or provide all required time model features manually."
+            )
+        if enriched.get("is_holiday") is None:
+            enriched["is_holiday"] = 0
+            warnings.append("is_holiday was missing and set to 0 because no timestamp was provided.")
     return enriched, warnings
 
 

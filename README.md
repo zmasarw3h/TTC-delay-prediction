@@ -6,7 +6,7 @@ The final system will estimate expected delay duration in minutes after an incid
 
 ## Current Status
 
-The project currently has reproducible data-cleaning, target-diagnostics, categorical normalization, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, Phase 11A model-improvement EDA for planning feature engineering v2, API-ready input validation utilities, a Phase 9 local FastAPI prediction service, and a Phase 10 FastAPI-served local demo frontend with repaired planner-oriented controls. SHAP is optional and not required for the default explainability workflow.
+The project currently has reproducible data-cleaning, target-diagnostics, categorical normalization, leakage-safe feature-building, baseline evaluation, first fixed-configuration model-training, fixed-model error-analysis, fixed model-improvement experiment scripts, a Phase 7B two-output delay/risk modeling script, Phase 7C severe-delay probability calibration, Phase 8 model explainability reports, Phase 11A model-improvement EDA for planning feature engineering v2, API-ready input validation utilities, a local FastAPI prediction service, a FastAPI-served demo frontend, and Phase 11C local historical feature lookup for API inference. SHAP is optional and not required for the default explainability workflow.
 
 ## Project Structure
 
@@ -225,7 +225,7 @@ reports/risk_models/two_output_predictions_test.csv
 reports/risk_models/two_output_summary.json
 ```
 
-The two-output artifact is written to `artifacts/risk_models/two_output_model.joblib`. API and frontend code are still not implemented.
+The two-output artifact is written to `artifacts/risk_models/two_output_model.joblib`.
 
 ## Calibrated Severe-Delay Probabilities
 
@@ -256,7 +256,7 @@ reports/calibration/calibrated_two_output_predictions_validation.csv
 reports/calibration/calibrated_two_output_predictions_test.csv
 ```
 
-The calibrated artifact is written to `artifacts/calibration/calibrated_two_output_model.joblib`. These calibrated probabilities are served by the local FastAPI prediction service. Frontend code is still not implemented.
+The calibrated artifact is written to `artifacts/calibration/calibrated_two_output_model.joblib`. These calibrated probabilities are served by the local FastAPI prediction service.
 
 ## Model Explainability
 
@@ -301,7 +301,7 @@ Open the local demo UI:
 http://127.0.0.1:8000/
 ```
 
-The repaired local demo UI uses Bus and Streetcar mode buttons, clean normalized category controls, a searchable route picker filtered by mode, route-scoped direction and stop selection, and optional location matching assistance after the route-stop pair has been validated. Route/location combinations that are not present in local TTC GTFS route-stop data are blocked before prediction. The app still expects engineered prior-delay features and does not implement raw TTC incident-to-feature lookup.
+The repaired local demo UI uses Bus and Streetcar mode buttons, clean normalized category controls, a searchable route picker filtered by mode, route-scoped direction and stop selection, and optional location matching assistance after the route-stop pair has been validated. Route/location combinations that are not present in local TTC GTFS route-stop data are blocked before prediction. Users can run the local demo with basic incident details and timestamp; historical prior-delay features are computed automatically from local prior incident records. Advanced historical overrides remain available only for debugging.
 
 Route-stop validation requires a local TTC routes and schedules GTFS zip. Set `TTC_GTFS_ZIP_PATH` or place the zip here:
 
@@ -319,12 +319,14 @@ By default, the API loads:
 
 ```text
 artifacts/calibration/calibrated_two_output_model.joblib
+data/processed/modeling/modeling_dataset.csv
 ```
 
-You can override the artifact path with:
+You can override these paths with:
 
 ```bash
 TTC_MODEL_ARTIFACT_PATH=/path/to/calibrated_two_output_model.joblib \
+TTC_HISTORICAL_FEATURE_DATA_PATH=/path/to/modeling_dataset.csv \
 uvicorn src.api.app:app --reload
 ```
 
@@ -337,6 +339,8 @@ Endpoints:
 - `GET /route-locations`
 - `POST /validate-route-location`
 - `POST /match-location`
+- `GET /historical-lookup-info`
+- `POST /compute-historical-features`
 - `POST /predict-delay`
 - `GET /`
 - `GET /static/styles.css`
@@ -353,21 +357,15 @@ curl -X POST http://127.0.0.1:8000/predict-delay \
     "Direction": "N",
     "Incident": "Mechanical",
     "Location": "Dufferin Station",
-    "timestamp": "2024-02-03T08:30:00",
-    "prior_route_mean_delay": 10.0,
-    "prior_route_hour_mean_delay": 12.0,
-    "prior_incident_mean_delay": 9.0,
-    "prior_mode_mean_delay": 8.0,
-    "prior_global_mean_delay": 7.0,
-    "prior_route_hour_7d_mean_delay": 11.0
+    "timestamp": "2024-02-03T08:30:00"
   }'
 ```
 
-The prediction endpoint can derive time fields and the Ontario holiday flag from `timestamp`. It still expects prior-only historical delay features, or it will rely on model-pipeline imputation with a warning. It does not yet implement raw incident-to-feature lookup or weather enrichment. The frontend is a local demo UI served by FastAPI, not a deployed application.
+The prediction endpoint derives time fields and the Ontario holiday flag from `timestamp`, then computes v1 and v2 historical delay features from local records where `ts < timestamp`. Same-timestamp and future rows are excluded. If callers explicitly provide historical features, those values override lookup results and produce warnings. Weather enrichment is not implemented. The frontend is a local demo UI served by FastAPI, not a deployed application.
 
 ## API Input Validation
 
-API-ready validation helpers live in `src/api/input_validation.py`. They normalize engineered model feature payloads, preserve route categories such as `29`, `501`, and `RAD`, convert missing categorical inputs to `Unknown`, keep missing numeric historical features as `None` for model-pipeline imputation, and reject leakage-sensitive fields. See [API input contract](docs/api_input_contract.md) and [FastAPI service docs](docs/api_service.md) for the current contract.
+API-ready validation helpers live in `src/api/input_validation.py`. They normalize model feature payloads, preserve route categories such as `29`, `501`, and `RAD`, convert missing categorical inputs to `Unknown`, keep missing numeric historical features as `None` for model-pipeline imputation when lookup has no support, and reject leakage-sensitive fields. See [API input contract](docs/api_input_contract.md), [historical feature lookup](docs/historical_feature_lookup.md), and [FastAPI service docs](docs/api_service.md) for the current contract.
 
 ## Planning Docs
 
@@ -376,6 +374,7 @@ API-ready validation helpers live in `src/api/input_validation.py`. They normali
 - [Model design](docs/model_design.md)
 - [Modeling data policy](docs/modeling_data_policy.md)
 - [Feature engineering](docs/feature_engineering.md)
+- [Historical feature lookup](docs/historical_feature_lookup.md)
 - [Modeling baselines](docs/modeling_baselines.md)
 - [Model training](docs/model_training.md)
 - [Model error analysis](docs/error_analysis.md)

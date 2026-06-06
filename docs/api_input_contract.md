@@ -2,9 +2,9 @@
 
 ## Scope
 
-The FastAPI service validates engineered model feature payloads and can derive time-based model features from a caller-provided `timestamp`. It does not implement live historical feature lookup, raw incident-to-feature transformation, weather enrichment, or a frontend.
+The FastAPI service validates incident-time payloads, derives time-based model features from a caller-provided `timestamp`, and computes historical prior-delay features from local prior incident records. It does not implement raw TTC feed ingestion, weather enrichment, deployment, or live data updates.
 
-The calibrated two-output model expects the approved feature columns from `feature_metadata.json`. Callers usually need to provide:
+The calibrated two-output model expects the approved feature columns from `feature_metadata.json`. For normal local-demo predictions, callers provide:
 
 - `mode`
 - `Route`
@@ -12,9 +12,10 @@ The calibrated two-output model expects the approved feature columns from `featu
 - `Incident`
 - `Location`
 - `timestamp`
-- historical prior-delay features
 
-When `timestamp` is provided, the API derives the model's time fields and Ontario/Toronto holiday flag automatically. Historical prior-delay features still need to be supplied by the caller or left missing for model-pipeline imputation.
+When `timestamp` is provided, the API derives the model's time fields and Ontario/Toronto holiday flag automatically. If historical prior-delay features are missing, the API computes them from `data/processed/modeling/modeling_dataset.csv` or `TTC_HISTORICAL_FEATURE_DATA_PATH`, using only rows where `ts < timestamp`.
+
+Advanced callers may provide historical feature values manually for debugging. Supplied historical values are treated as overrides and produce warnings. If `timestamp` is missing, the request is rejected unless all required time and historical model features are supplied manually.
 
 ## Categorical Inputs
 
@@ -50,7 +51,9 @@ When `timestamp` is provided, missing time-derived fields are derived automatica
 
 `is_holiday` is derived from Canadian/Ontario-relevant holidays. If a caller provides `is_holiday`, the API keeps the caller-provided value and returns a warning that it was not overwritten. If no `timestamp` is provided and `is_holiday` is missing, the API sets `is_holiday` to `0` and returns a warning.
 
-Historical numeric features, such as prior route or prior route-hour delay means, must be computed from records strictly before the prediction moment. If those values are unavailable and left missing, the model may still score the row after imputation, but the prediction may be less reliable because less historical context was available.
+Historical numeric features, such as prior route or prior route-hour delay means, are computed from records strictly before the prediction moment. Same-timestamp rows and future rows are excluded, the current incident target is never used, and `Min Gap` is never used.
+
+If no prior support exists for v2 means or severe-rate features, the API leaves those values as `None` so the model pipeline can impute them. Historical count features use `0` when there is no support. The v1 `prior_route_hour_7d_mean_delay` feature can fall back to route, mode, and global prior means.
 
 ## Rejected Fields
 

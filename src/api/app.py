@@ -29,6 +29,8 @@ from src.api.schemas import (
     DelayPredictionResponse,
     EngineeredIncidentFeatures,
     HealthResponse,
+    HistoricalFeatureComputationResponse,
+    HistoricalLookupInfoResponse,
     LocationMatchRequest,
     LocationMatchResponse,
     ModelInfoResponse,
@@ -155,10 +157,37 @@ def match_location_endpoint(payload: LocationMatchRequest) -> LocationMatchRespo
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@app.get("/historical-lookup-info", response_model=HistoricalLookupInfoResponse)
+def historical_lookup_info() -> HistoricalLookupInfoResponse:
+    try:
+        return HistoricalLookupInfoResponse(**prediction_service.historical_lookup_info())
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/compute-historical-features", response_model=HistoricalFeatureComputationResponse)
+def compute_historical_features(
+    payload: EngineeredIncidentFeatures,
+) -> HistoricalFeatureComputationResponse:
+    try:
+        result = prediction_service.compute_historical_features(payload.model_dump(exclude_unset=True))
+        return HistoricalFeatureComputationResponse(
+            computed_historical_features=result.features,
+            warnings=result.warnings,
+            normalized_input_values=result.normalized_inputs,
+            support_counts=result.support_counts,
+            metadata=result.metadata,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.post("/predict-delay", response_model=DelayPredictionResponse)
 def predict_delay(payload: EngineeredIncidentFeatures) -> DelayPredictionResponse:
     try:
-        result = prediction_service.predict(payload.model_dump())
+        result = prediction_service.predict(payload.model_dump(exclude_unset=True))
         return DelayPredictionResponse(**asdict(result))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

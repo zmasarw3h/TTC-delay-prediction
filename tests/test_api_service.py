@@ -6,11 +6,12 @@ import zipfile
 
 import joblib
 import numpy as np
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 from src.api.input_validation import LEAKAGE_FIELDS
-from src.features.build_features import FEATURE_COLUMNS
+from src.features.build_features import FEATURE_COLUMNS, HISTORICAL_FEATURES
 
 
 STATIC_DIR = Path(__file__).resolve().parents[1] / "src" / "api" / "static"
@@ -104,8 +105,49 @@ def fake_artifact_path(tmp_path):
 
 
 @pytest.fixture()
-def client(fake_artifact_path, monkeypatch):
+def fake_historical_path(tmp_path):
+    path = tmp_path / "fake_modeling_dataset.csv"
+    pd.DataFrame(
+        [
+            {
+                "ts": "2024-01-01T08:00:00",
+                "mode": "bus",
+                "Route": "29",
+                "Direction": "N",
+                "Incident": "Mechanical",
+                "Location": "DUFFERIN STATION",
+                "Min Delay": 10,
+                "hour": 8,
+            },
+            {
+                "ts": "2024-01-02T08:00:00",
+                "mode": "bus",
+                "Route": "29",
+                "Direction": "N",
+                "Incident": "Mechanical",
+                "Location": "DUFFERIN STATION",
+                "Min Delay": 20,
+                "hour": 8,
+            },
+            {
+                "ts": "2024-01-03T09:00:00",
+                "mode": "bus",
+                "Route": "29",
+                "Direction": "S",
+                "Incident": "Operations",
+                "Location": "DUFFERIN STATION",
+                "Min Delay": 65,
+                "hour": 9,
+            },
+        ]
+    ).to_csv(path, index=False)
+    return path
+
+
+@pytest.fixture()
+def client(fake_artifact_path, fake_historical_path, monkeypatch):
     monkeypatch.setenv("TTC_MODEL_ARTIFACT_PATH", str(fake_artifact_path))
+    monkeypatch.setenv("TTC_HISTORICAL_FEATURE_DATA_PATH", str(fake_historical_path))
     monkeypatch.setenv("TTC_GTFS_ZIP_PATH", str(fake_artifact_path.parent / "missing_gtfs.zip"))
     app_module = importlib.import_module("src.api.app")
     app_module.prediction_service = app_module.CalibratedDelayPredictionService()
@@ -184,8 +226,9 @@ def fake_gtfs_path(tmp_path):
 
 
 @pytest.fixture()
-def client_with_gtfs(fake_artifact_path, fake_gtfs_path, monkeypatch):
+def client_with_gtfs(fake_artifact_path, fake_historical_path, fake_gtfs_path, monkeypatch):
     monkeypatch.setenv("TTC_MODEL_ARTIFACT_PATH", str(fake_artifact_path))
+    monkeypatch.setenv("TTC_HISTORICAL_FEATURE_DATA_PATH", str(fake_historical_path))
     monkeypatch.setenv("TTC_GTFS_ZIP_PATH", str(fake_gtfs_path))
     app_module = importlib.import_module("src.api.app")
     app_module.prediction_service = app_module.CalibratedDelayPredictionService()
@@ -217,6 +260,18 @@ def valid_payload() -> dict:
         "prior_mode_mean_delay": 8.0,
         "prior_global_mean_delay": 7.0,
         "prior_route_hour_7d_mean_delay": 11.0,
+        "prior_route_incident_mean_delay": 10.0,
+        "prior_mode_incident_mean_delay": 10.0,
+        "prior_route_direction_mean_delay": 10.0,
+        "prior_route_incident_count": 2,
+        "prior_route_30d_mean_delay": 10.0,
+        "prior_incident_30d_mean_delay": 10.0,
+        "prior_route_30d_severe_rate_30": 0.1,
+        "prior_incident_30d_severe_rate_30": 0.1,
+        "prior_route_30d_severe_rate_60": 0.0,
+        "prior_incident_30d_severe_rate_60": 0.0,
+        "prior_location_mean_delay": 10.0,
+        "prior_location_count": 2,
     }
 
 
@@ -284,7 +339,7 @@ def test_model_info_works(client):
     assert body["target_column"] == "Min Delay"
     assert body["risk_thresholds"] == [30, 60]
     assert body["selected_calibration_methods"]["30"]["calibration_method"] == "sigmoid"
-    assert "raw TTC incident records" in " ".join(body["notes_limitations"])
+    assert "computes local historical features" in " ".join(body["notes_limitations"])
 
 
 def test_model_options_returns_expected_structure(client):
@@ -500,6 +555,55 @@ def test_predict_delay_returns_expected_response_shape(client):
     assert body["model_phase"] == "Phase 9 test"
 
 
+def test_predict_delay_works_with_basic_fields_and_timestamp(client):
+    payload = {
+        "mode": "bus",
+        "Route": "29",
+        "Direction": "N",
+        "Incident": "Mechanical",
+        "Location": "Dufferin Station",
+        "timestamp": "2024-01-04T08:30:00",
+    }
+
+    response = client.post("/predict-delay", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["predicted_delay_minutes"] == 12.5
+    assert any("Historical features were computed from prior local records" in warning for warning in body["warnings"])
+    app_module = importlib.import_module("src.api.app")
+    scored = app_module.prediction_service.artifact["expected_delay_regressor"].seen_frame.iloc[0]
+    assert scored["prior_route_mean_delay"] == pytest.approx(95 / 3)
+    assert scored["prior_route_incident_mean_delay"] == pytest.approx(15)
+    assert scored["prior_route_incident_count"] == 2
+    assert scored["prior_location_count"] == 3
+
+
+def test_caller_provided_historical_override_is_respected(client):
+    payload = {
+        "mode": "bus",
+        "Route": "29",
+        "Direction": "N",
+        "Incident": "Mechanical",
+        "Location": "Dufferin Station",
+        "timestamp": "2024-01-04T08:30:00",
+        "prior_route_mean_delay": 99.0,
+    }
+
+    response = client.post("/predict-delay", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert any(
+        "Using caller-provided historical feature override: prior_route_mean_delay" in warning
+        for warning in body["warnings"]
+    )
+    app_module = importlib.import_module("src.api.app")
+    scored = app_module.prediction_service.artifact["expected_delay_regressor"].seen_frame.iloc[0]
+    assert scored["prior_route_mean_delay"] == 99.0
+    assert scored["prior_route_incident_count"] == 2
+
+
 def test_predict_delay_uses_normalized_categorical_values(client):
     payload = valid_payload()
     payload["Route"] = 29.0
@@ -667,11 +771,45 @@ def test_missing_historical_numeric_features_return_warnings(client):
     payload = valid_payload()
     payload["prior_route_mean_delay"] = None
     payload["prior_route_hour_7d_mean_delay"] = None
+    payload["timestamp"] = "2023-12-01T08:30:00"
 
     response = client.post("/predict-delay", json=payload)
 
     assert response.status_code == 200
-    assert any("Missing historical prior-delay feature" in warning for warning in response.json()["warnings"])
+    assert any("had no prior support" in warning for warning in response.json()["warnings"])
+
+
+def test_historical_lookup_info_works(client, fake_historical_path):
+    response = client.get("/historical-lookup-info")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["historical_data_path"] == str(fake_historical_path)
+    assert body["row_count"] == 3
+    assert body["available_historical_feature_names"] == HISTORICAL_FEATURES
+    assert body["min_timestamp"].startswith("2024-01-01")
+    assert body["max_timestamp"].startswith("2024-01-03")
+
+
+def test_compute_historical_features_endpoint_works(client):
+    response = client.post(
+        "/compute-historical-features",
+        json={
+            "mode": "bus",
+            "Route": "29",
+            "Direction": "N",
+            "Incident": "Mechanical",
+            "Location": "Dufferin Station",
+            "timestamp": "2024-01-04T08:30:00",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["computed_historical_features"]["prior_route_mean_delay"] == pytest.approx(95 / 3)
+    assert body["computed_historical_features"]["prior_route_incident_count"] == 2
+    assert body["normalized_input_values"]["Location"] == "DUFFERIN STATION"
+    assert body["support_counts"]["prior_route_incident_count"] == 2
 
 
 def test_unknown_categorical_values_warn_without_crashing(client):

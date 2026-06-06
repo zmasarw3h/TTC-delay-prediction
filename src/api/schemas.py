@@ -38,6 +38,18 @@ class EngineeredIncidentFeatures(BaseModel):
     prior_mode_mean_delay: float | None = None
     prior_global_mean_delay: float | None = None
     prior_route_hour_7d_mean_delay: float | None = None
+    prior_route_incident_mean_delay: float | None = None
+    prior_mode_incident_mean_delay: float | None = None
+    prior_route_direction_mean_delay: float | None = None
+    prior_route_incident_count: float | None = None
+    prior_route_30d_mean_delay: float | None = None
+    prior_incident_30d_mean_delay: float | None = None
+    prior_route_30d_severe_rate_30: float | None = None
+    prior_incident_30d_severe_rate_30: float | None = None
+    prior_route_30d_severe_rate_60: float | None = None
+    prior_incident_30d_severe_rate_60: float | None = None
+    prior_location_mean_delay: float | None = None
+    prior_location_count: float | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -146,3 +158,23 @@ class DelayPredictionResponse(BaseModel):
     warnings: list[str]
     model_name: str
     model_phase: str
+
+
+class HistoricalLookupInfoResponse(BaseModel):
+    historical_data_path: str
+    loaded: bool
+    loadable: bool
+    row_count: int | None = None
+    min_timestamp: str | None = None
+    max_timestamp: str | None = None
+    available_historical_feature_names: list[str]
+    notes_limitations: list[str]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class HistoricalFeatureComputationResponse(BaseModel):
+    computed_historical_features: dict[str, float | int | None]
+    warnings: list[str]
+    normalized_input_values: dict[str, Any]
+    support_counts: dict[str, int]
+    metadata: dict[str, Any]

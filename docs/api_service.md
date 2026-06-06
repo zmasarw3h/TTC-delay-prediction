@@ -2,7 +2,7 @@
 
 ## Scope
 
-Phase 9 adds a local FastAPI service for the existing calibrated two-output model artifact. Phase 10 adds a thin static frontend served by the same FastAPI app, Phase 10B adds planner-oriented controls plus model-category and location-matching assistance, and Phase 10C repairs the demo around the normalized categorical contract. It does not train models, run Optuna, compute SHAP values, add weather enrichment, or implement deployment.
+Phase 9 adds a local FastAPI service for the existing calibrated two-output model artifact. Phase 10 adds a thin static frontend served by the same FastAPI app, Phase 10B adds planner-oriented controls plus model-category and location-matching assistance, Phase 10C repairs the demo around the normalized categorical contract, and Phase 11C adds local historical feature lookup for inference. It does not train models, run Optuna, compute SHAP values, add weather enrichment, or implement deployment.
 
 The default model artifact path is:
 
@@ -16,6 +16,14 @@ Set `TTC_MODEL_ARTIFACT_PATH` to load a different local artifact:
 TTC_MODEL_ARTIFACT_PATH=/path/to/calibrated_two_output_model.joblib \
 uvicorn src.api.app:app --reload
 ```
+
+The default local historical feature source is:
+
+```text
+data/processed/modeling/modeling_dataset.csv
+```
+
+Set `TTC_HISTORICAL_FEATURE_DATA_PATH` to use a different local modeling CSV for historical lookup.
 
 ## Local Run
 
@@ -50,7 +58,7 @@ Static assets:
 /static/app.js
 ```
 
-The demo loads `/health`, `/model-info`, `/model-options`, and `/route-options` on page load, then submits engineered incident-time payloads to `/predict-delay`. It displays planner-friendly cards for expected delay minutes, calibrated `30+` and `60+` minute probabilities, risk bands, binary severe-delay flags, and input notes. Selected probability cutoffs are kept under a collapsed model-details section.
+The demo loads `/health`, `/model-info`, `/model-options`, `/route-options`, and `/historical-lookup-info` on page load, then submits basic incident-time payloads to `/predict-delay`. It displays planner-friendly cards for expected delay minutes, calibrated `30+` and `60+` minute probabilities, risk bands, binary severe-delay flags, and input notes. Selected probability cutoffs are kept under a collapsed model-details section.
 
 Mode is selected with Bus and Streetcar buttons. Incident controls use controlled normalized options rather than raw artifact categories. Route is a dependency-free searchable picker filtered by the selected mode. After route selection, the Direction dropdown is limited to GTFS-derived directions for that route, using the normalized `N`, `E`, `S`, `W`, and `B` model contract. The selected mode is submitted as the same `bus` / `streetcar` model feature as before.
 
@@ -63,7 +71,7 @@ GTFS is used only for route-stop validity and route-derived mode. The model stil
 - fuzzy matches with score from `75` to `< 90` are shown as suggestions that the user can accept
 - lower-confidence model-location matches are not accepted, so the route-validated normalized stop text is submitted instead
 
-This is a local demo UI only. It still expects engineered incident-time features; raw TTC incident-to-feature lookup and weather enrichment are not implemented.
+This is a local demo UI only. It accepts basic incident details and timestamp, then computes model time features and historical features locally. Weather enrichment and live TTC data updates are not implemented.
 
 Route-stop validation requires a local TTC GTFS zip file. Set `TTC_GTFS_ZIP_PATH` or place the zip at:
 
@@ -264,9 +272,46 @@ The frontend submits the matched model location when high-confidence matching su
 
 Invalid or malformed requests return standard FastAPI `422` JSON responses. Normal no-match cases return a successful JSON response with `match_type` set to `none`, `accepted_for_prediction` set to `false`, and a readable warning instead of raising a server error.
 
+### `GET /historical-lookup-info`
+
+Returns historical lookup status and coverage:
+
+```json
+{
+  "historical_data_path": "data/processed/modeling/modeling_dataset.csv",
+  "loaded": true,
+  "loadable": true,
+  "row_count": 12345,
+  "min_timestamp": "2014-01-01T00:00:00",
+  "max_timestamp": "2024-12-31T23:59:00",
+  "available_historical_feature_names": ["prior_route_mean_delay"],
+  "notes_limitations": ["Only rows with ts strictly before the prediction timestamp are used."],
+  "warnings": []
+}
+```
+
+### `POST /compute-historical-features`
+
+Computes historical features without scoring the model. This is useful for debugging and frontend transparency.
+
+Request:
+
+```json
+{
+  "mode": "bus",
+  "Route": "29",
+  "Direction": "N",
+  "Incident": "Mechanical",
+  "Location": "Dufferin Station",
+  "timestamp": "2024-02-03T08:30:00"
+}
+```
+
+Response includes computed feature values, warnings, normalized input values, support counts, and metadata.
+
 ### `POST /predict-delay`
 
-Returns one calibrated two-output prediction for an engineered incident-time feature payload:
+Returns one calibrated two-output prediction for a basic incident-time payload:
 
 - expected delay in minutes
 - calibrated severe-delay probabilities for `30+` and `60+` minute thresholds
@@ -276,7 +321,9 @@ Returns one calibrated two-output prediction for an engineered incident-time fea
 
 ## Engineered Feature Input Contract
 
-The current model requires engineered model features in the exact artifact feature order. Required model features are:
+The current model still scores a DataFrame in the exact artifact feature order. The API builds that DataFrame from basic incident fields, timestamp-derived time features, and local historical lookup values.
+
+Required model features are:
 
 ```text
 mode
@@ -300,9 +347,32 @@ prior_incident_mean_delay
 prior_mode_mean_delay
 prior_global_mean_delay
 prior_route_hour_7d_mean_delay
+prior_route_incident_mean_delay
+prior_mode_incident_mean_delay
+prior_route_direction_mean_delay
+prior_route_incident_count
+prior_route_30d_mean_delay
+prior_incident_30d_mean_delay
+prior_route_30d_severe_rate_30
+prior_incident_30d_severe_rate_30
+prior_route_30d_severe_rate_60
+prior_incident_30d_severe_rate_60
+prior_location_mean_delay
+prior_location_count
 ```
 
-Callers usually only need to provide the categorical incident fields, `timestamp`, and the historical prior-delay features. If `timestamp` is provided and time-derived fields are missing, the API derives:
+Callers usually only need to provide:
+
+```text
+mode
+Route
+Direction
+Incident
+Location
+timestamp
+```
+
+If `timestamp` is provided and time-derived fields are missing, the API derives:
 
 ```text
 hour
@@ -317,9 +387,9 @@ day_sin
 day_cos
 ```
 
-`is_holiday` is derived from Canadian/Ontario-relevant holidays using the timestamp date. If `is_holiday` is provided by the caller, the API keeps that value and returns a warning that it was not overwritten. If no timestamp is provided and `is_holiday` is missing, it is set to `0` and the response includes a warning.
+`is_holiday` is derived from Canadian/Ontario-relevant holidays using the timestamp date. If `is_holiday` is provided by the caller, the API keeps that value and returns a warning that it was not overwritten.
 
-Historical features are required because the trained model uses prior-only delay context, such as route-level and route-hour delay means. These values must be computed from incidents strictly before the prediction moment. The API does not currently include a feature store or raw incident-to-feature lookup layer, so callers must provide these engineered historical values. Missing historical numeric features may be passed as `null` so the model pipeline can impute, but the response warns that prediction reliability may be reduced.
+Historical features are computed from local prior incidents where `ts < timestamp`. Same-timestamp and future rows are excluded. If a caller supplies historical values manually, the API uses those override values and returns warnings naming the overridden features. If `timestamp` is missing, the request is rejected unless all required time and historical model features are provided manually.
 
 ## Example Request
 
@@ -332,13 +402,7 @@ curl -X POST http://127.0.0.1:8000/predict-delay \
     "Direction": "N",
     "Incident": "Mechanical",
     "Location": "Dufferin Station",
-    "timestamp": "2024-02-03T08:30:00",
-    "prior_route_mean_delay": 10.0,
-    "prior_route_hour_mean_delay": 12.0,
-    "prior_incident_mean_delay": 9.0,
-    "prior_mode_mean_delay": 8.0,
-    "prior_global_mean_delay": 7.0,
-    "prior_route_hour_7d_mean_delay": 11.0
+    "timestamp": "2024-02-03T08:30:00"
   }'
 ```
 
@@ -356,6 +420,7 @@ curl -X POST http://127.0.0.1:8000/predict-delay \
   "severe_delay_prediction_60": 0,
   "selected_probability_cutoff_60": 0.3,
   "warnings": [
+    "Historical features were computed from prior local records with ts before the prediction timestamp.",
     "Derived missing time fields from timestamp.",
     "Derived is_holiday from timestamp."
   ],
@@ -381,7 +446,7 @@ severe_delay_15
 
 ## Limitations
 
-- Raw incident-to-feature lookup is not implemented yet.
 - Weather enrichment is not included yet.
-- Predictions depend on the quality of provided historical prior-delay features.
+- Historical lookup is a local CSV lookup, not a production feature store.
+- Historical lookup is only as current as `modeling_dataset.csv`.
 - The API is local/demo-ready, not production-deployed.
