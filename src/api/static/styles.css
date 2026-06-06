@@ -457,15 +457,9 @@ input:disabled {
   font-weight: 900;
 }
 
-.warnings ul,
-.note-list {
+.warnings ul {
   margin: 0;
   padding-left: 20px;
-}
-
-.note-list {
-  font-size: 0.9rem;
-  font-weight: 600;
 }
 
 .error-box {

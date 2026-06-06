@@ -525,12 +525,6 @@ function bandMarkup(band) {
   return `<span class="band ${normalized}">${escapeHtml(label)}</span>`;
 }
 
-function renderWarnings(warnings) {
-  const notes = warnings && warnings.length ? warnings : ["No input warnings returned."];
-  const items = notes.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
-  return resultCard("Input notes", `<ul class="note-list">${items}</ul>`);
-}
-
 function renderModelDetails(result) {
   return `
     <details class="model-details">
@@ -560,7 +554,6 @@ function renderResults(result) {
       ${resultCard("Chance of 60+ minute delay", formatPercent(result.calibrated_severe_delay_probability_60))}
       ${resultCard("60+ minute risk level", bandMarkup(result.risk_band_60))}
       ${resultCard("60+ minute delay flag", labelForFlag(result.severe_delay_prediction_60))}
-      ${renderWarnings(result.warnings)}
     </div>
     ${renderModelDetails(result)}
   `;
