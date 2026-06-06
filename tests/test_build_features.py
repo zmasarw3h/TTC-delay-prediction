@@ -1,5 +1,8 @@
+import importlib
+
 import pandas as pd
 
+from src.features import build_features
 from src.features.build_features import (
     FEATURE_COLUMNS,
     create_feature_metadata,
@@ -148,6 +151,158 @@ def test_historical_features_do_not_use_same_timestamp_rows():
     assert next_timestamp_row["prior_global_mean_delay"] == 130 / 3
 
 
+def test_v2_route_incident_features_use_only_prior_timestamps():
+    frame = pd.DataFrame(
+        {
+            "mode": ["bus", "bus", "bus", "bus"],
+            "ts": [
+                "2023-01-01 08:00:00",
+                "2023-01-02 08:00:00",
+                "2023-01-02 08:00:00",
+                "2023-01-03 08:00:00",
+            ],
+            "Route": ["1", "1", "1", "1"],
+            "Direction": ["N/B", "N/B", "N/B", "S/B"],
+            "Location": ["A", "A", "B", "B"],
+            "Incident": ["Delay", "Delay", "Delay", "Delay"],
+            "Min Delay": [10, 20, 100, 40],
+            "Min Gap": [99, 99, 99, 99],
+            "Vehicle": ["100", "101", "102", "103"],
+            "is_holiday": [0, 0, 0, 0],
+        }
+    )
+
+    featured = build_feature_frame(frame, max_delay_minutes=240)
+    same_timestamp_rows = featured[featured["ts"] == pd.Timestamp("2023-01-02 08:00:00")]
+    next_timestamp_row = featured[featured["ts"] == pd.Timestamp("2023-01-03 08:00:00")].iloc[0]
+
+    assert same_timestamp_rows["prior_route_incident_mean_delay"].tolist() == [10.0, 10.0]
+    assert same_timestamp_rows["prior_route_incident_count"].tolist() == [1, 1]
+    assert next_timestamp_row["prior_route_incident_mean_delay"] == 130 / 3
+    assert next_timestamp_row["prior_route_incident_count"] == 3
+    assert next_timestamp_row["prior_mode_incident_mean_delay"] == 130 / 3
+
+
+def test_v2_route_direction_mean_uses_normalized_direction_and_prior_only():
+    frame = pd.DataFrame(
+        {
+            "mode": ["bus", "bus", "bus"],
+            "ts": [
+                "2023-01-01 08:00:00",
+                "2023-01-02 08:00:00",
+                "2023-01-03 08:00:00",
+            ],
+            "Route": ["1", "1", "1"],
+            "Direction": ["north", "N/B", "S/B"],
+            "Location": ["A", "A", "A"],
+            "Incident": ["Mechanical", "Mechanical", "Mechanical"],
+            "Min Delay": [10, 30, 50],
+            "Min Gap": [99, 99, 99],
+            "Vehicle": ["100", "101", "102"],
+            "is_holiday": [0, 0, 0],
+        }
+    )
+
+    featured = build_feature_frame(frame, max_delay_minutes=240)
+
+    assert featured.loc[0, "Direction"] == "N"
+    assert featured.loc[1, "prior_route_direction_mean_delay"] == 10
+    assert pd.isna(featured.loc[2, "prior_route_direction_mean_delay"])
+
+
+def test_v2_rolling_30d_route_mean_excludes_current_future_and_old_rows():
+    frame = pd.DataFrame(
+        {
+            "mode": ["bus"] * 5,
+            "ts": [
+                "2023-01-01 08:00:00",
+                "2023-01-10 08:00:00",
+                "2023-01-10 08:00:00",
+                "2023-01-31 08:00:00",
+                "2023-02-01 08:00:00",
+            ],
+            "Route": ["1"] * 5,
+            "Direction": ["N/B"] * 5,
+            "Location": ["A"] * 5,
+            "Incident": ["Delay"] * 5,
+            "Min Delay": [10, 20, 80, 40, 100],
+            "Min Gap": [99] * 5,
+            "Vehicle": ["100", "101", "102", "103", "104"],
+            "is_holiday": [0] * 5,
+        }
+    )
+
+    featured = build_feature_frame(frame, max_delay_minutes=240)
+    same_timestamp_rows = featured[featured["ts"] == pd.Timestamp("2023-01-10 08:00:00")]
+    jan_31 = featured[featured["ts"] == pd.Timestamp("2023-01-31 08:00:00")].iloc[0]
+    feb_1 = featured[featured["ts"] == pd.Timestamp("2023-02-01 08:00:00")].iloc[0]
+
+    assert same_timestamp_rows["prior_route_30d_mean_delay"].tolist() == [10.0, 10.0]
+    assert jan_31["prior_route_30d_mean_delay"] == (10 + 20 + 80) / 3
+    assert feb_1["prior_route_30d_mean_delay"] == (20 + 80 + 40) / 3
+
+
+def test_v2_rolling_30d_severe_rates_are_prior_only():
+    frame = pd.DataFrame(
+        {
+            "mode": ["bus"] * 4,
+            "ts": [
+                "2023-01-01 08:00:00",
+                "2023-01-02 08:00:00",
+                "2023-01-03 08:00:00",
+                "2023-01-04 08:00:00",
+            ],
+            "Route": ["1"] * 4,
+            "Direction": ["N/B"] * 4,
+            "Location": ["A"] * 4,
+            "Incident": ["Mechanical"] * 4,
+            "Min Delay": [10, 30, 60, 90],
+            "Min Gap": [99] * 4,
+            "Vehicle": ["100", "101", "102", "103"],
+            "is_holiday": [0] * 4,
+        }
+    )
+
+    featured = build_feature_frame(frame, max_delay_minutes=240)
+    last = featured.iloc[-1]
+
+    assert last["prior_route_30d_severe_rate_30"] == 2 / 3
+    assert last["prior_incident_30d_severe_rate_30"] == 2 / 3
+    assert last["prior_route_30d_severe_rate_60"] == 1 / 3
+    assert last["prior_incident_30d_severe_rate_60"] == 1 / 3
+
+
+def test_v2_location_features_are_prior_only_and_leave_missing_mean():
+    frame = pd.DataFrame(
+        {
+            "mode": ["bus", "bus", "bus", "bus"],
+            "ts": [
+                "2023-01-01 08:00:00",
+                "2023-01-02 08:00:00",
+                "2023-01-02 08:00:00",
+                "2023-01-03 08:00:00",
+            ],
+            "Route": ["1", "1", "2", "2"],
+            "Direction": ["N/B"] * 4,
+            "Location": ["Kennedy Stn", "Kennedy Station", "Kennedy Station", "Other Place"],
+            "Incident": ["Delay"] * 4,
+            "Min Delay": [10, 20, 100, 40],
+            "Min Gap": [99] * 4,
+            "Vehicle": ["100", "101", "102", "103"],
+            "is_holiday": [0] * 4,
+        }
+    )
+
+    featured = build_feature_frame(frame, max_delay_minutes=240)
+    same_timestamp_rows = featured[featured["ts"] == pd.Timestamp("2023-01-02 08:00:00")]
+    other_place = featured[featured["Location"] == "OTHER PLACE"].iloc[0]
+
+    assert same_timestamp_rows["prior_location_mean_delay"].tolist() == [10.0, 10.0]
+    assert same_timestamp_rows["prior_location_count"].tolist() == [1, 1]
+    assert pd.isna(other_place["prior_location_mean_delay"])
+    assert other_place["prior_location_count"] == 0
+
+
 def test_min_gap_is_excluded_from_main_feature_list():
     assert "Min Gap" not in FEATURE_COLUMNS
 
@@ -183,3 +338,33 @@ def test_create_feature_metadata_contains_expected_contract():
     assert "Direction" in metadata["categorical_normalization"]["normalized_columns"]
     assert "Direction_raw" in metadata["categorical_normalization"]["raw_columns_preserved"]
     assert "prior_route_hour_7d_mean_delay" in metadata["historical_feature_definitions"]
+    for column in [
+        "prior_route_incident_mean_delay",
+        "prior_mode_incident_mean_delay",
+        "prior_route_direction_mean_delay",
+        "prior_route_incident_count",
+        "prior_route_30d_mean_delay",
+        "prior_incident_30d_mean_delay",
+        "prior_route_30d_severe_rate_30",
+        "prior_incident_30d_severe_rate_30",
+        "prior_route_30d_severe_rate_60",
+        "prior_incident_30d_severe_rate_60",
+        "prior_location_mean_delay",
+        "prior_location_count",
+    ]:
+        assert column in metadata["feature_columns"]
+        assert column in metadata["numeric_columns"]
+        assert column in metadata["historical_feature_definitions"]
+    assert "v2_prior_rolling_30d" in metadata["historical_feature_groups"]
+    assert "30D" in metadata["rolling_window_definitions"]
+    assert "prior_route_30d_severe_rate_30" in metadata["severe_rate_feature_definitions"]
+    assert "Location" in metadata["high_cardinality_feature_warnings"]
+
+
+def test_build_features_import_is_safe(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    module = importlib.reload(build_features)
+
+    assert hasattr(module, "build_feature_frame")
+    assert not (tmp_path / "data").exists()

@@ -99,7 +99,7 @@ test.csv
 feature_metadata.json
 ```
 
-The feature-building step applies deterministic categorical normalization before feature creation, preserves raw `Route`, `Direction`, `Incident`, and `Location` values with `_raw` suffixes when available, applies the documented `0 <= Min Delay <= 240` modeling target policy, and creates leakage-safe historical features using prior rows only. It does not train models.
+The feature-building step applies deterministic categorical normalization before feature creation, preserves raw `Route`, `Direction`, `Incident`, and `Location` values with `_raw` suffixes when available, applies the documented `0 <= Min Delay <= 240` modeling target policy, and creates leakage-safe v1 and Phase 11B v2 historical features using prior rows only. The same command builds `modeling_dataset.csv`, chronological train/validation/test splits, and `feature_metadata.json`. It does not train models.
 
 Categorical normalization is documented in `docs/categorical_normalization.md`. It normalizes directions to `N`, `E`, `S`, `W`, `B`, or `Unknown`, maps incident variants to curated operational categories, cleans route identifiers conservatively, and applies safe deterministic location text cleanup only. It does not perform fuzzy location snapping, geocoding, or target-based normalization.
 

@@ -58,6 +58,18 @@ HISTORICAL_FEATURES = [
     "prior_mode_mean_delay",
     "prior_global_mean_delay",
     "prior_route_hour_7d_mean_delay",
+    "prior_route_incident_mean_delay",
+    "prior_mode_incident_mean_delay",
+    "prior_route_direction_mean_delay",
+    "prior_route_incident_count",
+    "prior_route_30d_mean_delay",
+    "prior_incident_30d_mean_delay",
+    "prior_route_30d_severe_rate_30",
+    "prior_incident_30d_severe_rate_30",
+    "prior_route_30d_severe_rate_60",
+    "prior_incident_30d_severe_rate_60",
+    "prior_location_mean_delay",
+    "prior_location_count",
 ]
 NUMERIC_FEATURES = TIME_FEATURES + HISTORICAL_FEATURES
 FEATURE_COLUMNS = TIME_FEATURES + MAIN_CATEGORICAL_FEATURES + HISTORICAL_FEATURES
@@ -142,6 +154,70 @@ def _prior_timestamp_mean(df: pd.DataFrame, group_columns: list[str] | None = No
     )["_prior_mean"].set_axis(df.index)
 
 
+def _prior_timestamp_count(df: pd.DataFrame, group_columns: list[str]) -> pd.Series:
+    """Count records with timestamps strictly before each row for a grouping."""
+    work = df[group_columns + ["ts"]].copy()
+    grouped_stats = (
+        work.groupby(group_columns + ["ts"], dropna=False)
+        .size()
+        .rename("_count")
+        .reset_index()
+        .sort_values(group_columns + ["ts"])
+    )
+    grouped_stats["_prior_count"] = (
+        grouped_stats.groupby(group_columns, dropna=False)["_count"].cumsum()
+        - grouped_stats["_count"]
+    )
+
+    return (
+        work.merge(
+            grouped_stats[group_columns + ["ts", "_prior_count"]],
+            on=group_columns + ["ts"],
+            how="left",
+        )["_prior_count"]
+        .fillna(0)
+        .astype("int64")
+        .set_axis(df.index)
+    )
+
+
+def _prior_rolling_timestamp_mean(
+    df: pd.DataFrame,
+    group_columns: list[str],
+    value_column: str,
+    window: str,
+) -> pd.Series:
+    """Rolling prior-only mean over timestamp-aggregated group history."""
+    work = df[group_columns + ["ts"]].copy()
+    work[value_column] = pd.to_numeric(df[value_column], errors="coerce")
+    grouped_stats = (
+        work.groupby(group_columns + ["ts"], dropna=False)[value_column]
+        .agg(["sum", "count"])
+        .reset_index()
+        .sort_values(group_columns + ["ts"])
+    )
+
+    pieces: list[pd.DataFrame] = []
+    for _, group in grouped_stats.groupby(group_columns, dropna=False, sort=False):
+        ordered = group.sort_values("ts")
+        indexed = ordered.set_index(pd.DatetimeIndex(ordered["ts"]))
+        prior_sum = indexed["sum"].rolling(window, closed="left").sum()
+        prior_count = indexed["count"].rolling(window, closed="left").sum()
+        rolled = ordered[group_columns + ["ts"]].copy()
+        rolled["_prior_rolling_mean"] = (prior_sum / prior_count).to_numpy()
+        pieces.append(rolled)
+
+    if not pieces:
+        return pd.Series(dtype="float64", index=df.index)
+
+    rolling_by_ts = pd.concat(pieces, ignore_index=True)
+    return work.merge(
+        rolling_by_ts[group_columns + ["ts", "_prior_rolling_mean"]],
+        on=group_columns + ["ts"],
+        how="left",
+    )["_prior_rolling_mean"].set_axis(df.index)
+
+
 def _prior_route_hour_7d_mean(df: pd.DataFrame) -> pd.Series:
     """Mean prior delay for the same route-hour in the previous 7 calendar days."""
     pieces: list[pd.Series] = []
@@ -172,6 +248,37 @@ def add_historical_features(df: pd.DataFrame) -> pd.DataFrame:
     featured["prior_route_hour_mean_delay"] = _prior_timestamp_mean(featured, ["Route", "hour"])
     featured["prior_incident_mean_delay"] = _prior_timestamp_mean(featured, ["Incident"])
     featured["prior_mode_mean_delay"] = _prior_timestamp_mean(featured, ["mode"])
+    featured["prior_route_incident_mean_delay"] = _prior_timestamp_mean(
+        featured, ["Route", "Incident"]
+    )
+    featured["prior_mode_incident_mean_delay"] = _prior_timestamp_mean(
+        featured, ["mode", "Incident"]
+    )
+    featured["prior_route_direction_mean_delay"] = _prior_timestamp_mean(
+        featured, ["Route", "Direction"]
+    )
+    featured["prior_route_incident_count"] = _prior_timestamp_count(
+        featured, ["Route", "Incident"]
+    )
+    featured["prior_location_mean_delay"] = _prior_timestamp_mean(featured, ["Location"])
+    featured["prior_location_count"] = _prior_timestamp_count(featured, ["Location"])
+
+    featured["prior_route_30d_mean_delay"] = _prior_rolling_timestamp_mean(
+        featured, ["Route"], TARGET_COLUMN, "30D"
+    )
+    featured["prior_incident_30d_mean_delay"] = _prior_rolling_timestamp_mean(
+        featured, ["Incident"], TARGET_COLUMN, "30D"
+    )
+    for threshold in [30, 60]:
+        severe_column = f"_severe_delay_{threshold}"
+        featured[severe_column] = (featured[TARGET_COLUMN] >= threshold).astype(int)
+        featured[f"prior_route_30d_severe_rate_{threshold}"] = _prior_rolling_timestamp_mean(
+            featured, ["Route"], severe_column, "30D"
+        )
+        featured[f"prior_incident_30d_severe_rate_{threshold}"] = _prior_rolling_timestamp_mean(
+            featured, ["Incident"], severe_column, "30D"
+        )
+        featured = featured.drop(columns=[severe_column])
 
     route_hour_7d = _prior_route_hour_7d_mean(featured)
     featured["prior_route_hour_7d_mean_delay"] = (
@@ -272,6 +379,67 @@ def create_feature_metadata(
             },
         },
         "numeric_columns": NUMERIC_FEATURES,
+        "historical_feature_groups": {
+            "v1": [
+                "prior_route_mean_delay",
+                "prior_route_hour_mean_delay",
+                "prior_incident_mean_delay",
+                "prior_mode_mean_delay",
+                "prior_global_mean_delay",
+                "prior_route_hour_7d_mean_delay",
+            ],
+            "v2_prior_expanding": [
+                "prior_route_incident_mean_delay",
+                "prior_mode_incident_mean_delay",
+                "prior_route_direction_mean_delay",
+                "prior_route_incident_count",
+                "prior_location_mean_delay",
+                "prior_location_count",
+            ],
+            "v2_prior_rolling_30d": [
+                "prior_route_30d_mean_delay",
+                "prior_incident_30d_mean_delay",
+                "prior_route_30d_severe_rate_30",
+                "prior_incident_30d_severe_rate_30",
+                "prior_route_30d_severe_rate_60",
+                "prior_incident_30d_severe_rate_60",
+            ],
+        },
+        "historical_feature_leakage_rules": {
+            "prior_only_timestamp_rule": "Historical features use only rows where historical_row.ts < current_row.ts.",
+            "same_timestamp_rule": "Rows sharing the exact same timestamp are aggregated at timestamp level and never use one another as history.",
+            "fallback_policy": "Existing v1 prior_route_hour_7d_mean_delay keeps its documented fallback chain. V2 means and rates are not filled with full-dataset group means; missing values remain transparent for downstream imputation. Count features expose support.",
+            "excluded_target_leakage_columns": LEAKAGE_SENSITIVE_COLUMNS,
+        },
+        "rolling_window_definitions": {
+            "30D": {
+                "window": "current ts - 30 calendar days <= historical ts < current ts",
+                "features": [
+                    "prior_route_30d_mean_delay",
+                    "prior_incident_30d_mean_delay",
+                    "prior_route_30d_severe_rate_30",
+                    "prior_incident_30d_severe_rate_30",
+                    "prior_route_30d_severe_rate_60",
+                    "prior_incident_30d_severe_rate_60",
+                ],
+            },
+            "7D": {
+                "window": "current ts - 7 calendar days <= historical ts < current ts",
+                "features": ["prior_route_hour_7d_mean_delay"],
+            },
+        },
+        "severe_rate_feature_definitions": {
+            "prior_route_30d_severe_rate_30": "Mean of prior indicator Min Delay >= 30 over the previous 30 calendar days for the same Route.",
+            "prior_incident_30d_severe_rate_30": "Mean of prior indicator Min Delay >= 30 over the previous 30 calendar days for the same Incident.",
+            "prior_route_30d_severe_rate_60": "Mean of prior indicator Min Delay >= 60 over the previous 30 calendar days for the same Route.",
+            "prior_incident_30d_severe_rate_60": "Mean of prior indicator Min Delay >= 60 over the previous 30 calendar days for the same Incident.",
+        },
+        "high_cardinality_feature_warnings": {
+            "Location": {
+                "features": ["prior_location_mean_delay", "prior_location_count"],
+                "warning": "Location history is high-cardinality and support-sensitive. prior_location_mean_delay is intentionally left missing when no prior location history exists; prior_location_count should be used to learn confidence or guard downstream use.",
+            }
+        },
         "historical_feature_definitions": {
             "prior_route_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same Route.",
             "prior_route_hour_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same Route and hour.",
@@ -283,6 +451,18 @@ def create_feature_metadata(
                 "timestamps are within the previous 7 calendar days and strictly before the current row. "
                 "Missing values fall back to prior route mean, then prior mode mean, then prior global mean."
             ),
+            "prior_route_incident_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same Route and Incident.",
+            "prior_mode_incident_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same mode and Incident.",
+            "prior_route_direction_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same Route and Direction.",
+            "prior_route_incident_count": "Count of rows with ts strictly before the current row and the same Route and Incident.",
+            "prior_route_30d_mean_delay": "Mean Min Delay for rows with the same Route where current ts - 30 calendar days <= historical ts < current ts.",
+            "prior_incident_30d_mean_delay": "Mean Min Delay for rows with the same Incident where current ts - 30 calendar days <= historical ts < current ts.",
+            "prior_route_30d_severe_rate_30": "Mean prior severe-delay indicator Min Delay >= 30 for rows with the same Route in the prior 30 calendar days.",
+            "prior_incident_30d_severe_rate_30": "Mean prior severe-delay indicator Min Delay >= 30 for rows with the same Incident in the prior 30 calendar days.",
+            "prior_route_30d_severe_rate_60": "Mean prior severe-delay indicator Min Delay >= 60 for rows with the same Route in the prior 30 calendar days.",
+            "prior_incident_30d_severe_rate_60": "Mean prior severe-delay indicator Min Delay >= 60 for rows with the same Incident in the prior 30 calendar days.",
+            "prior_location_mean_delay": "Mean Min Delay for rows with ts strictly before the current row and the same normalized Location. High-cardinality support-sensitive feature; missing values are preserved when no prior location history exists.",
+            "prior_location_count": "Count of rows with ts strictly before the current row and the same normalized Location.",
         },
         "generated_timestamp": pd.Timestamp.now(tz="UTC").isoformat(),
     }

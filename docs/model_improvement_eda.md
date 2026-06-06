@@ -2,6 +2,8 @@
 
 Phase 11A adds a focused reporting layer for deciding which historical features should be built in Phase 11B. It investigates where the current expected-delay regressor is still wrong, how severe-delay errors concentrate, and whether candidate prior-only historical groupings have enough support to be useful.
 
+Phase 11B implements the top EDA-recommended historical features in the feature-building pipeline: route-incident, mode-incident, route-direction, route-incident count, 30-day route/incident means, 30-day severe rates for 30+ and 60+ minute delays, and guarded location mean/count features.
+
 This phase does not train models, tune hyperparameters, modify feature engineering, or write model artifacts.
 
 ## Required Inputs
