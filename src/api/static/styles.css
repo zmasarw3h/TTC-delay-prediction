@@ -458,7 +458,6 @@ input:disabled {
 }
 
 .warnings ul,
-.limitations ul,
 .note-list {
   margin: 0;
   padding-left: 20px;
@@ -475,10 +474,6 @@ input:disabled {
   background: #fff0f2;
   color: var(--brand-dark);
   padding: 14px;
-}
-
-.limitations {
-  margin-top: 20px;
 }
 
 @media (max-width: 900px) {

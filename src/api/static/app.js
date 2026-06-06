@@ -261,17 +261,11 @@ async function loadServiceReadiness() {
     }));
     routeStopDataAvailable = Boolean(routePayload.gtfs_available);
 
-    const artifactText = health.artifact_exists ? "Model artifact available." : "Model artifact missing.";
-    const routeText = routeStopDataAvailable
-      ? "Route-stop validation loaded."
-      : `Route-stop validation unavailable: ${routePayload.warning || "GTFS data missing."}`;
-    const historicalText = historical.loadable
-      ? `Historical lookup available (${historical.min_timestamp || "unknown"} to ${historical.max_timestamp || "unknown"}), using prior records only.`
-      : "Historical lookup unavailable.";
-    serviceNote.textContent = `${artifactText} ${routeText} ${historicalText}`;
-    serviceNote.className = `service-note ${
-      health.artifact_exists && routeStopDataAvailable && historical.loadable ? "ok" : "warn"
-    }`;
+    const systemsConnected = health.artifact_exists && routeStopDataAvailable && historical.loadable;
+    serviceNote.textContent = systemsConnected
+      ? "Systems connected."
+      : "Some local systems are unavailable.";
+    serviceNote.className = `service-note ${systemsConnected ? "ok" : "warn"}`;
   } catch (error) {
     setSelectOptions("Direction", DIRECTION_OPTIONS);
     setSelectOptions(
