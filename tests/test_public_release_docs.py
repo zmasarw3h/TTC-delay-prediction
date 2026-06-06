@@ -11,8 +11,15 @@ def test_public_release_docs_exist():
         "docs/technical_report.md",
         "docs/architecture.md",
         "docs/final_qa_checklist.md",
+        "src/analysis/create_public_figures.py",
     ]:
         assert Path(path).exists(), path
+
+
+def test_stale_notebook_artifacts_are_not_public_files():
+    assert not Path("TTC_Delays_Cleaned.ipynb").exists()
+    assert not Path("notebooks").exists()
+    assert not Path("scripts").exists()
 
 
 def test_readme_prediction_example_uses_basic_fields_only():

@@ -87,7 +87,10 @@ venv/
 env/
 
 # Notebooks
+*.ipynb
 .ipynb_checkpoints/
+# To intentionally publish an explanatory notebook later, add a narrow
+# unignore rule such as `!notebooks/example.ipynb` after the ignore rule.
 
 # OS/editor
 .DS_Store

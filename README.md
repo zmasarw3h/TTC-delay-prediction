@@ -25,19 +25,23 @@ Final metrics are from chronological holdout evaluation with train `2014-2022`, 
 | `60+` min severe-delay risk | PR-AUC | 0.437 |
 | `60+` min severe-delay risk | Recall | 0.822 |
 
-## Demo Screenshots
+## Figures and Demo
 
-Screenshots can be added under `docs/images/` after running the local frontend. No fabricated screenshots are included.
+### Performance Figures
 
 Generated public figures can be recreated from local report outputs:
 
 ```bash
-python3 scripts/create_public_figures.py
+python3 -m src.analysis.create_public_figures
 ```
 
 ![Model performance comparison](docs/images/model_performance_comparison.png)
 
 ![Severe-delay metrics](docs/images/severe_delay_metrics.png)
+
+### Frontend Screenshots
+
+Frontend screenshots can be added under `docs/images/` after running the local demo. No fabricated screenshots are included.
 
 ## Problem
 
@@ -82,7 +86,7 @@ src/features/   target diagnostics and leakage-safe feature engineering
 src/models/     baselines, XGBoost training, experiments, calibration, explainability
 src/api/        FastAPI app, prediction service, historical lookup, static frontend
 tests/          lightweight unit and API tests
-docs/           model card, technical report, API docs, design notes
+docs/           curated public docs, with development notes archived separately
 data/           local raw/processed data placeholders only
 reports/        local generated report placeholders only
 artifacts/      local generated model artifact placeholders only

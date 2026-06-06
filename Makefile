@@ -1,4 +1,4 @@
-.PHONY: test api build-features baselines train experiments calibrate explain eda
+.PHONY: test api figures build-features baselines train experiments calibrate explain eda
 
 # Data and artifact generation requires local TTC files and writes gitignored outputs.
 
@@ -7,6 +7,9 @@ test:
 
 api:
 	uvicorn src.api.app:app --reload
+
+figures:
+	python3 -m src.analysis.create_public_figures
 
 build-features:
 	python3 -m src.features.build_features --input data/processed/ttc_delays_cleaned.csv --output-dir data/processed/modeling --max-delay-minutes 240
