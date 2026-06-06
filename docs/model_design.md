@@ -224,12 +224,10 @@ Example response:
 
 ```json
 {
-  "model_name": "xgboost_delay_regressor",
-  "target": "Min Delay",
-  "task": "regression",
-  "trained_through": "2023-12-31",
-  "test_period": "2024",
-  "primary_metric": "MAE"
+  "model_name": "calibrated_two_output_delay_and_risk_model",
+  "target_column": "Min Delay",
+  "risk_thresholds": [30, 60],
+  "model_phase": "Phase 7C"
 }
 ```
 
@@ -244,36 +242,37 @@ Example request:
 ```json
 {
   "mode": "bus",
-  "route": "29",
-  "direction": "N/B",
-  "incident": "Mechanical",
-  "location": "Dufferin and Bloor",
-  "reported_at": "2024-02-15T08:30:00",
-  "temp": -2.0,
-  "total_precip": 1.2,
-  "total_snow": 0.0,
-  "snowfall_flag": 0
+  "Route": "29",
+  "Direction": "N",
+  "Incident": "Mechanical",
+  "Location": "Dufferin Station",
+  "timestamp": "2024-02-15T08:30:00"
 }
 ```
+
+The current API derives time features and computes missing historical features from local prior records when `timestamp` is provided. Weather enrichment is not implemented.
 
 Example response:
 
 ```json
 {
   "predicted_delay_minutes": 12.4,
-  "risk_band": "medium",
-  "model_version": "xgb-001"
+  "calibrated_severe_delay_probability_30": 0.18,
+  "risk_band_30": "medium",
+  "calibrated_severe_delay_probability_60": 0.04,
+  "risk_band_60": "low",
+  "model_phase": "Phase 7C"
 }
 ```
 
-## Implementation Notes For Future Phase
+## Implementation Status
 
-The next implementation phase should convert the notebook into a small reproducible project structure, for example:
+The notebook has been converted into a reproducible project structure:
 
-- `src/data/` for ingestion and weather caching.
+- `src/data/` for ingestion, cleaning, normalization, and category audits.
 - `src/features/` for leakage-safe feature generation.
-- `src/models/` for baseline, training, tuning, and evaluation.
-- `src/api/` for FastAPI.
+- `src/models/` for baseline, training, experiments, calibration, error analysis, and explainability.
+- `src/api/` for the FastAPI local service, frontend, validation, and historical lookup.
 - `reports/` or `artifacts/` for generated metrics, plots, and model files.
 
-Keep the notebook as an exploratory reference until the scripted pipeline reproduces the final metrics.
+The notebook remains an exploratory reference, not the final implementation.

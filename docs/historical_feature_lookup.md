@@ -101,6 +101,6 @@ If historical fields are omitted, the API computes them automatically. If a call
 
 - This is a local CSV lookup, not a production feature store.
 - Historical features are only as current as the local `modeling_dataset.csv`.
-- It is not suitable for live real-time TTC prediction without live data updates.
+- It is not suitable for live operational prediction without live data updates.
 - Location matching remains approximate assistance based on normalized text.
 - Request-time DataFrame filtering is acceptable for the local demo; future production work would need indexed or precomputed feature storage.

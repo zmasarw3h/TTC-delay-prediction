@@ -20,39 +20,38 @@ The main modeling task is regression.
 
 ## Intended Use Case
 
-After a TTC bus or streetcar incident is reported, the system should estimate the likely delay duration and help identify high-risk patterns across:
+After a TTC bus or streetcar incident is reported, the system estimates the likely delay duration and calibrated severe-delay risk from:
 
 - route
 - mode
 - incident type
 - location
 - time of day, day of week, month, weekend, and holiday timing
-- weather conditions
-- historical route, route-hour, and incident-type delay behavior
+- historical route, route-hour, incident-type, location, and recent severe-delay behavior
 
-The final result should support portfolio-grade analysis and demonstration, not operational deployment claims. It should communicate model performance clearly, avoid data leakage, and provide explainability that is understandable to non-technical readers.
+The final result supports portfolio-grade analysis and local demonstration, not operational deployment claims. It communicates model performance clearly, avoids data leakage, and provides explainability that is understandable to non-technical readers. Weather enrichment remains future work.
 
-## Planned Deliverables
+## Implemented Deliverables
 
-The final project should include:
+The current reproducible implementation includes:
 
 - Reproducible data pipeline for bus and streetcar delay data.
 - Leakage-safe feature engineering.
 - Chronological train, validation, and test split.
 - Baseline comparison.
-- XGBoost regression model.
-- Optuna hyperparameter tuning if the baseline model and data size justify it.
-- SHAP explainability for global and local model interpretation.
-- FastAPI prediction endpoint.
-- Thin frontend or demo interface.
-- Polished `README.md` with resume-safe metrics and clear caveats.
+- XGBoost expected-delay regression.
+- Calibrated severe-delay risk classifiers for `30+` and `60+` minute thresholds.
+- Model-agnostic permutation-importance explainability reports.
+- FastAPI local prediction endpoint.
+- Local static frontend demo.
+- Historical feature lookup for API inference from local prior records.
+- Polished public documentation with resume-safe metrics and clear caveats.
 
-## Scope for Current Phase
+## Current Scope
 
-The current phase is documentation and planning only:
+The current scope is a local/demo-ready ML system:
 
-- Define the project direction.
-- Audit the current notebook.
-- Design the leakage-safe modeling setup.
-
-Do not convert the notebook into scripts yet. Do not train new models yet. Do not create the API or frontend yet.
+- Keep raw data, processed data, generated reports, and model artifacts out of the public repo.
+- Avoid deployment and production-readiness claims.
+- Report only metrics from clean scripted runs.
+- Treat the notebook as historical exploratory reference, not the final implementation.

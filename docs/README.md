@@ -1,0 +1,24 @@
+# Documentation Index
+
+- [Model card](model_card.md): intended use, data, leakage controls, metrics, calibration, and limitations.
+- [Technical report](technical_report.md): concise end-to-end project narrative and modeling decisions.
+- [Architecture](architecture.md): pipeline diagram and component descriptions.
+- [Project definition](project_definition.md): scope, prediction target, success criteria, and project rules.
+- [Current state audit](current_state_audit.md): original notebook audit and migration rationale.
+- [Model design](model_design.md): modeling assumptions, split strategy, and leakage policy.
+- [Modeling data policy](modeling_data_policy.md): target filtering and modeling dataset rules.
+- [Categorical normalization](categorical_normalization.md): deterministic normalization contract for key categorical fields.
+- [Category quality audit](category_quality_audit.md): category-health audit approach and UI implications.
+- [Feature engineering](feature_engineering.md): time features, v1/v2 historical features, and split generation.
+- [Modeling baselines](modeling_baselines.md): route/history baseline evaluation.
+- [Model training](model_training.md): fixed XGBoost regression training.
+- [Model experiments](model_experiments.md): validation-selected XGBoost experiment comparison.
+- [Two-output model](two_output_model.md): expected-delay plus severe-risk model artifact.
+- [Probability calibration](probability_calibration.md): calibrated severe-delay probabilities and threshold selection.
+- [Error analysis](error_analysis.md): residual analysis workflow.
+- [Model improvement EDA](model_improvement_eda.md): feature-improvement diagnostics.
+- [Explainability](explainability.md): permutation-importance reports and interpretation notes.
+- [API service](api_service.md): FastAPI endpoints and local frontend behavior.
+- [API input contract](api_input_contract.md): accepted fields, normalization, leakage rejection, and historical lookup defaults.
+- [Historical feature lookup](historical_feature_lookup.md): prior-only inference-time historical feature computation.
+- [Final QA checklist](final_qa_checklist.md): release-readiness checks before making the repo public.

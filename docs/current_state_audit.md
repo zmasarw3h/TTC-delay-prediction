@@ -2,6 +2,8 @@
 
 Source inspected: `TTC_Delays_Cleaned.ipynb`
 
+This is a historical audit of the exploratory notebook that motivated the scripted implementation. It is not the current project architecture and its stored notebook metrics are not final README or resume metrics.
+
 ## What The Notebook Currently Does
 
 The notebook is an exploratory end-to-end prototype. It currently:
@@ -28,11 +30,11 @@ The notebook also contains some unrelated or unfinished exploratory work, includ
 
 The notebook appears to use:
 
-- TTC Streetcar Delays workbooks from `/Users/zmasarweh/Downloads/TTC Streetcar Delays Data`.
-- TTC Bus Delays workbooks from `/Users/zmasarweh/Downloads/TTC Bus Delays Data`.
+- TTC Streetcar Delays workbooks from a local downloads folder.
+- TTC Bus Delays workbooks from a local downloads folder.
 - Weather data fetched through `meteostat`, including hourly and daily data.
 - Ontario statutory holidays through the `holidays` package.
-- A local events JSON file from `/Users/zmasarweh/Downloads/testest/events_data.json`, although this appears unrelated to the current modeling flow.
+- A local events JSON file from an unrelated downloads folder, although this appears unrelated to the current modeling flow.
 
 Observed stored notebook output shows:
 
@@ -131,7 +133,7 @@ These numbers should be treated as provisional until the pipeline is made reprod
 
 The notebook has several reproducibility problems:
 
-- Hard-coded absolute local paths point to `/Users/zmasarweh/Downloads/...`.
+- Hard-coded absolute local paths point to one developer machine's downloads folder.
 - Output filenames are written directly into the project root or current working directory, such as `consolidated_with_time_features4.xlsx`, `short_with_time_features.xlsx`, `w_strcar_df.csv`, and `mae_compare.png`.
 - The configured `OUTFILE` says `ttc_delays_2014_2024.parquet`, but the streetcar block writes an Excel file instead.
 - Bus and streetcar data-loading logic is duplicated with only small changes.
@@ -159,7 +161,7 @@ The notebook has some good leakage-aware intent, especially using `shift(1)` bef
 
 ## Inconsistencies With Resume-Style Claims
 
-The notebook contains strong performance claims, including roughly 80%+ MAE improvement over baseline. These claims are not yet resume-safe because:
+The notebook contains strong performance claims from exploratory runs. These claims are not final README or resume metrics because:
 
 - The execution is not fully reproducible from a clean checkout.
 - The data comes from hard-coded local paths.

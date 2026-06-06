@@ -38,6 +38,9 @@ reports/experiments/*
 !reports/experiments/.gitkeep
 reports/risk_models/*
 !reports/risk_models/.gitkeep
+!reports/model_improvement_eda/
+reports/model_improvement_eda/*
+!reports/model_improvement_eda/.gitkeep
 !reports/category_audit/
 reports/category_audit/*
 !reports/category_audit/.gitkeep
@@ -59,6 +62,11 @@ reports/explainability/figures/*
 *.jpeg
 *.svg
 *.pdf
+!docs/images/
+!docs/images/.gitkeep
+!docs/images/*.png
+!docs/images/*.jpg
+!docs/images/*.jpeg
 
 # Python
 __pycache__/
@@ -73,6 +81,7 @@ htmlcov/
 # Environments and local config
 .env
 .env.*
+!.env.example
 .venv/
 venv/
 env/
