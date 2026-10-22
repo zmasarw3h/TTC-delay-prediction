@@ -27,6 +27,10 @@ Final metrics are from chronological holdout evaluation with train `2014-2022`, 
 
 ## Figures and Demo
 
+### Results Figures
+
+![Calibration curve for the 30+ minute severe-delay model on the 2024 test set](docs/images/calibration_curve_30plus_test.png)
+
 ### Performance Figures
 
 Generated public figures can be recreated from local report outputs:
@@ -39,9 +43,11 @@ python3 -m src.analysis.create_public_figures
 
 ![Severe-delay metrics](docs/images/severe_delay_metrics.png)
 
-### Frontend Screenshots
+### Local Demo
 
-Frontend screenshots can be added under `docs/images/` after running the local demo. No fabricated screenshots are included.
+Screenshot of the local frontend after one prediction (bus route 29, 2024-02-03 08:30, Mechanical incident):
+
+![Local demo after one prediction](docs/images/demo.png)
 
 ## Problem
 
@@ -197,9 +203,3 @@ Convenience `make` targets are also available; see [Makefile](Makefile).
 - Weather enrichment is not implemented.
 - Location matching is approximate assistance based on normalized text and optional local GTFS route-stop validation; it is not geocoding.
 - The model should not be used for operational decisions without validation on live data and a deployment-grade monitoring plan.
-
-## Resume-Ready Highlights
-
-- Built a reproducible leakage-aware ML pipeline with chronological evaluation, prior-only historical features, and validation-only model selection.
-- Improved 2024 holdout MAE from an 8.98 minute route-history baseline to 7.76 minutes with a log-target XGBoost regressor.
-- Added calibrated `30+` and `60+` minute severe-delay probabilities behind a local FastAPI demo that computes historical features automatically from prior records.
